@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { defaultProgress, type Progress } from "./progress";
+import { defaultProgress, migrateStarters, type Progress } from "./progress";
 import { setMusicMuted, setMuted } from "../audio";
 
 const KEY = "siege-progress-v1";
@@ -16,7 +16,7 @@ export function loadProgress() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Progress;
-      if (p.v === 1) { const d = defaultProgress(); state = { ...d, ...p, stats: { ...d.stats, ...p.stats }, questClaims: { ...p.questClaims } }; }
+      if (p.v === 1) { const d = defaultProgress(); state = migrateStarters({ ...d, ...p, stats: { ...d.stats, ...p.stats }, questClaims: { ...p.questClaims }, talents: { ...p.talents }, tutorials: { ...p.tutorials }, story: { ...p.story }, clues: { ...p.clues } }); }
     }
   } catch { /* corrupt save -> defaults */ }
   setMuted(state.muted); setMusicMuted(state.musicMuted);

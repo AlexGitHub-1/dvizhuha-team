@@ -1,3 +1,4 @@
+import { sfx, unlockAudio } from "@/game/audio";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -119,6 +120,7 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => { loadProgress(); }, []);
+  useEffect(() => { const on = (e: MouseEvent) => { if ((e.target as HTMLElement | null)?.closest?.("a[href]")) { unlockAudio(); sfx.stone(); } }; document.addEventListener("click", on, true); return () => document.removeEventListener("click", on, true); }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

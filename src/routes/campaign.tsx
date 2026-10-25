@@ -1,13 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { gameButton, MonsterPortrait, Panel } from "@/components/ui-kit";
+import { Currency, gameButton, MonsterPortrait } from "@/components/ui-kit";
 import { Wallet } from "@/components/ui-kit/MonsterCard";
-import { LEVELS } from "@/game/data/levels";
+import { LEVELS, recLabel } from "@/game/data/levels";
 import { LOCATIONS } from "@/game/data/locations";
 import { TOWERS } from "@/game/data/towers";
-import { isLevelUnlocked } from "@/game/meta/progress";
-import { useProgress } from "@/game/meta/store";
+import { isLevelUnlocked, markScene, pendingEpilogue, requiredPower, squadPower } from "@/game/meta/progress";
+import { setProgress, useProgress } from "@/game/meta/store";
+import { Cutscene } from "@/components/ui-kit/Cutscene";
 import { hitNode, NODES, renderWorld, WORLD_H, WORLD_W, type MapState } from "@/game/render/worldmap";
 import { sfx, startScene, stopScene, unlockAudio } from "@/game/audio";
 
@@ -51,7 +52,13 @@ function Campaign() {
   // initial camera + ambient
   useEffect(() => {
     const n = NODES[furthest]!; const el = wrap.current;
-    if (el) { const z = Math.max(clamp(el.clientWidth / 1500, 0.45, 1), el.clientWidth / WORLD_W, el.clientHeight / WORLD_H); st.current.view = { x: el.clientWidth / 2 - n.x * z, y: el.clientHeight / 2 - n.y * z, z }; }
+    if (el) {
+      const z = Math.max(clamp(el.clientWidth / 1500, 0.45, 1), el.clientWidth / WORLD_W, el.clientHeight / WORLD_H);
+      // start a step back (previous level) and glide the camera to the current one
+      const from = NODES[Math.max(0, furthest - 1)]!; const z0 = Math.max(z * 0.85, el.clientWidth / WORLD_W, el.clientHeight / WORLD_H);
+      st.current.view = { x: el.clientWidth / 2 - from.x * z0, y: el.clientHeight / 2 - from.y * z0, z: z0 };
+      setTimeout(() => centerOn(n.x, n.y, z), 250);
+    }
     st.current.banner = Math.max(-1, furthest - 1);
     const startAudio = () => { unlockAudio(); startScene("map", false); };
     startAudio(); window.addEventListener("pointerdown", startAudio, { once: true });
@@ -141,8 +148,10 @@ function Campaign() {
 
   const lvl = selected !== null ? LEVELS[selected]! : null;
   const hl = hover ? LEVELS[hover.i]! : null;
+  const epi = pendingEpilogue(p);
   return (
     <div className="flex h-screen w-full flex-col bg-background">
+      {epi && <Cutscene key={epi} sceneId={epi} onDone={() => setProgress((q) => markScene(q, epi))} />}
       <header className="z-10 flex items-center justify-between gap-3 border-b border-border bg-card/90 px-3 py-2">
         <div className="flex items-center gap-3">
           <Link to="/" className={gameButton({ variant: "ghost", size: "sm" })}>← Меню</Link>
@@ -170,20 +179,50 @@ function Campaign() {
             return <button key={l.id} onClick={() => jump(l.id)} className={cn(gameButton({ size: "sm", variant: open ? "secondary" : "ghost" }), !open && "opacity-50")}>{open ? "" : "🔒 "}{l.name}</button>;
           })}
         </div>
-        {lvl && (
-          <Panel className="absolute left-3 top-3 z-10 w-80 animate-pop-in" title={`${lvl.boss ? "Босс · " : ""}Уровень ${lvl.id}`}>
-            <div className="text-xs text-muted-foreground">{LOCATIONS[lvl.loc]!.name}</div>
-            <div className="font-display text-xl">{lvl.name}</div>
-            <div className="mt-1 text-lg tracking-tighter">{[1, 2, 3].map((s) => <span key={s} className={s <= (p.stars[lvl.id] ?? 0) ? "text-gold" : "text-muted-foreground/30"}>★</span>)}</div>
-            <p className="mt-1 text-xs text-muted-foreground">{LOCATIONS[lvl.loc]!.blurb}</p>
-            <div className="mt-2 text-xs">Ворота <b>{lvl.gateHp}</b> · башен <b>{lvl.towers.length}</b>{lvl.elite ? <> · элитных <b>{lvl.elite}</b></> : null} · награда <b className="text-gold">{lvl.gold}</b></div>
-            <div className="mt-1 flex flex-wrap gap-1">{[...new Set(lvl.towers)].map((k) => <span key={k} className={cn("rounded border px-1.5 py-0.5 text-[10px]", k === LOCATIONS[lvl.loc]!.newTower ? "border-primary text-primary" : "border-border text-muted-foreground")}>{TOWERS[k].name}</span>)}</div>
-            <div className="mt-3 flex items-center gap-2">
-              <button className={cn(gameButton({ variant: "primary", size: "md" }), "flex-1")} onClick={() => { sfx.warcry(); nav({ to: "/play/$levelId", params: { levelId: String(lvl.id) } }); }}>⚔ Штурм</button>
-              <MonsterPortrait id="troll" size={44} />
+        {lvl && (() => {
+          const loc = LOCATIONS[lvl.loc]!; const rec = requiredPower(lvl.id);
+          const avg = squadPower(p);
+          const ok = avg >= rec, near = avg >= rec * 0.85; const stars = p.stars[lvl.id] ?? 0;
+          const tone = ok ? "poison" : near ? "gold" : "blood";
+          return (
+          <div key={lvl.id} className="panel-texture absolute left-4 top-4 z-10 w-[22rem] overflow-hidden rounded-2xl border-2 border-gold/60 bg-card/95 shadow-2xl backdrop-blur animate-screen-in">
+            <div className={cn("relative px-4 pb-3 pt-4", lvl.boss ? "bg-blood/20" : "bg-primary/10")}>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold to-transparent" />
+              <button aria-label="Закрыть" onClick={() => { setSelected(null); st.current.selected = null; }} className="absolute right-2 top-2 h-7 w-7 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground">✕</button>
+              <div className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">{loc.name} · ур. {lvl.id}</div>
+              <div className="mt-0.5 flex items-center gap-2">
+                {lvl.boss && <span className="text-2xl" title="Босс">👑</span>}
+                <h3 className="font-display text-2xl uppercase leading-tight">{lvl.name}</h3>
+              </div>
+              <div className="mt-1 flex gap-1 text-2xl leading-none">{[1, 2, 3].map((s) => <span key={s} className={cn("transition", s <= stars ? "text-gold drop-shadow-[0_0_8px_var(--gold)]" : "text-muted-foreground/25")}>★</span>)}</div>
             </div>
-          </Panel>
-        )}
+            <div className="space-y-3 p-4">
+              <p className="text-xs italic text-muted-foreground">{loc.blurb}</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg border border-border bg-background/40 p-2"><div className="text-lg">🏰</div><div className="font-display text-sm">{lvl.gateHp}</div><div className="text-[10px] text-muted-foreground">ворота</div></div>
+                <div className="rounded-lg border border-border bg-background/40 p-2"><div className="text-lg">🗼</div><div className="font-display text-sm">{lvl.towers.length}{lvl.elite ? <span className="text-blood"> +{lvl.elite}★</span> : null}</div><div className="text-[10px] text-muted-foreground">башен</div></div>
+                <div className="rounded-lg border border-border bg-background/40 p-2"><div className="text-lg">⏳</div><div className="font-display text-sm">{Math.floor(lvl.timeLimit / 60)}:{String(lvl.timeLimit % 60).padStart(2, "0")}</div><div className="text-[10px] text-muted-foreground">время</div></div>
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px]"><span className="text-muted-foreground">Сила отряда</span><span className={`text-${tone}`}><b>{avg}</b> / нужно <b>{rec}</b> · {recLabel(lvl.id)}</span></div>
+                <div className="relative mt-1 h-2.5 overflow-hidden rounded-full bg-muted">
+                  <div className={cn("h-full rounded-full transition-[width]", ok ? "bg-poison" : near ? "bg-gold" : "bg-blood")} style={{ width: `${Math.min(100, (avg / Math.max(rec, 1)) * 100)}%` }} />
+                </div>
+                <div className={cn("mt-1 text-[11px]", `text-${tone}`)}>{ok ? "Отряд готов к штурму" : near ? "Будет тяжело — стоит прокачаться" : "Слишком сильная оборона — прокачай отряд"}</div>
+              </div>
+              <div className="flex flex-wrap gap-1">{[...new Set(lvl.towers)].map((k) => <span key={k} className={cn("rounded-full border px-2 py-0.5 text-[10px]", k === loc.newTower ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{k === loc.newTower ? "✦ " : ""}{TOWERS[k].name}</span>)}</div>
+              <div className="flex items-center justify-between rounded-lg border border-gold/30 bg-gold/5 px-3 py-2 text-xs">
+                <span className="text-muted-foreground">Награда</span>
+                <span className="flex items-center gap-2"><Currency kind="gold" value={lvl.gold} className="text-sm" />{!stars && <>+ <Currency kind="skulls" value={3} className="text-sm" /></>}</span>
+              </div>
+              <div className="flex items-stretch gap-2">
+                <button className={cn(gameButton({ variant: "primary", size: "lg" }), "flex-1 text-lg shadow-[var(--shadow-glow)] animate-soft-pulse")} onClick={() => { sfx.warcry(); nav({ to: "/play/$levelId", params: { levelId: String(lvl.id) } }); }}>⚔ Штурм</button>
+                <Link to="/squad" className={cn(gameButton({ variant: "secondary", size: "lg" }), "px-3")} title="Отряд"><MonsterPortrait id={p.squad[0] ?? "troll"} size={36} /></Link>
+              </div>
+            </div>
+          </div>
+          );
+        })()}
       </div>
     </div>
   );

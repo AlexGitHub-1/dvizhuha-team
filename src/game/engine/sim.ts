@@ -1,13 +1,14 @@
 import { LEVELS } from "../data/levels";
 import type { MonsterId } from "../data/monsters";
 import { MONSTERS } from "../data/monsters";
+import type { BattleMods } from "../meta/progress";
 import { canSummon, castSpell, createBattle, outcome, summon, update } from "./battle";
 
 /** Headless bot used for balance checks. */
-export function simulate(levelId: number, squad: { kind: MonsterId; lvl: number }[], seed = 1) {
+export function simulate(levelId: number, squad: { kind: MonsterId; lvl: number }[], seed = 1, mods?: BattleMods) {
   let s = seed; const orig = Math.random; Math.random = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   try {
-    const b = createBattle(LEVELS[levelId - 1]!, squad, "march");
+    const b = createBattle(LEVELS[levelId - 1]!, squad, "march", mods);
     const order = squad.map((_, i) => i).sort((a, c) => MONSTERS[squad[c]!.kind].cost - MONSTERS[squad[a]!.kind].cost);
     let t = 0; let wave = false;
     while (!b.result && t < 400) {
@@ -19,3 +20,4 @@ export function simulate(levelId: number, squad: { kind: MonsterId; lvl: number 
     return outcome(b);
   } finally { Math.random = orig; }
 }
+

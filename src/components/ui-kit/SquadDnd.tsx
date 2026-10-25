@@ -25,12 +25,12 @@ export function SquadDnd({ children }: { children: ReactNode }) {
   };
   /** Slot index under the pointer from the fixed slot grid (stable while cards slide). */
   const indexAt = (x: number, y: number) => {
-    const box = document.querySelector<HTMLElement>('[data-drop="squad"]'); const card = box?.querySelector<HTMLElement>("[data-slot]");
-    if (!box || !card) return 0;
-    const r = box.getBoundingClientRect(); const cw = card.offsetWidth + 8, chh = card.offsetHeight + 8;
-    const perRow = Math.max(1, Math.floor((box.clientWidth - 8) / cw));
-    const col = Math.max(0, Math.min(perRow - 1, Math.floor((x - r.left - 8 + cw * 0.5) / cw)));
-    const row = Math.max(0, Math.floor((y - r.top - 8) / chh));
+    const box = document.querySelector<HTMLElement>('[data-drop="squad"]');
+    if (!box) return 0;
+    const r = box.getBoundingClientRect(); const pad = box.clientLeft + 8; const cw = SLOT_W + SLOT_GAP, chh = SLOT_H + SLOT_GAP;
+    const perRow = Math.max(1, Math.floor((box.clientWidth - 16 + SLOT_GAP) / cw));
+    const col = Math.max(0, Math.min(perRow - 1, Math.floor((x - r.left - pad) / cw)));
+    const row = Math.max(0, Math.floor((y - r.top - pad) / chh));
     return row * perRow + col;
   };
   const start = (e: React.PointerEvent, id: MonsterId, from: From, onClick: () => void) => {
@@ -38,14 +38,15 @@ export function SquadDnd({ children }: { children: ReactNode }) {
     const card = e.currentTarget as HTMLElement; const r = card.getBoundingClientRect();
     const sx = e.clientX, sy = e.clientY; let started = false;
     const move = (ev: PointerEvent) => {
-      if (!started) { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return; started = true; sfx.whoosh(); }
+      if (!started) { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return; started = true; sfx.whoosh(); document.body.style.userSelect = "none"; }
       ev.preventDefault();
       const zone = zoneAt(ev.clientX, ev.clientY);
-      const d: DragState = { id, from, x: ev.clientX, y: ev.clientY, ox: sx - r.left, oy: sy - r.top, w: r.width, h: r.height, zone, index: zone === "squad" ? indexAt(ev.clientX - (sx - r.left) + r.width / 2, ev.clientY) : -1, origin: r };
+      const d: DragState = { id, from, x: ev.clientX, y: ev.clientY, ox: sx - r.left, oy: sy - r.top, w: r.width, h: r.height, zone, index: zone === "squad" ? indexAt(ev.clientX, ev.clientY) : -1, origin: r };
       dRef.current = d; setDrag(d);
     };
     const up = () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
+      document.body.style.userSelect = "";
       const d = dRef.current; dRef.current = null;
       if (!started || !d) { onClick(); return; }
       const p = getProgress(); let next = p;
@@ -80,7 +81,10 @@ export function SquadDnd({ children }: { children: ReactNode }) {
   );
 }
 
-/** Squad row: drop zone + reorderable cards with FLIP slide animation. */
+/** Fixed slot size so the squad panel never changes shape while dragging. */
+export const SLOT_W = 104, SLOT_H = 132, SLOT_GAP = 8;
+
+/** Squad row: drop zone + reorderable cards in fixed slots with FLIP slide animation. */
 export function SquadRow({ selected, onSelect }: { selected?: MonsterId; onSelect: (id: MonsterId) => void }) {
   const p = useProgress(); const { drag, start, landing } = useContext(Ctx);
   const limit = squadLimit(p);
@@ -89,38 +93,46 @@ export function SquadRow({ selected, onSelect }: { selected?: MonsterId; onSelec
   const full = over && !p.squad.includes(drag!.id) && p.squad.length >= limit;
   if (over && !full) { order = order.filter((x) => x !== drag!.id); order.splice(Math.min(drag!.index, order.length), 0, "__gap"); }
   else if (drag?.from === "squad") order = order.map((x) => (x === drag.id ? "__gap" : x));
-  const refs = useRef(new Map<string, HTMLElement>()); const prev = useRef(new Map<string, DOMRect>());
+  const refs = useRef(new Map<string, HTMLElement>()); const prev = useRef(new Map<string, { x: number; y: number }>());
   useLayoutEffect(() => {
+    // offsetLeft/Top ignore transforms, so in-flight animations never accumulate drift
+    const seen = new Set<string>();
     refs.current.forEach((el, k) => {
-      const r = el.getBoundingClientRect(); const o = prev.current.get(k);
-      if (o && (o.left !== r.left || o.top !== r.top)) {
-        el.style.transition = "none"; el.style.transform = `translate(${o.left - r.left}px, ${o.top - r.top}px)`;
-        requestAnimationFrame(() => { el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)"; el.style.transform = ""; });
+      seen.add(k);
+      const r = { x: el.offsetLeft, y: el.offsetTop }; const o = prev.current.get(k);
+      if (o && (o.x !== r.x || o.y !== r.y)) {
+        el.style.transition = "none"; el.style.transform = `translate(${o.x - r.x}px, ${o.y - r.y}px)`;
+        void el.offsetWidth;
+        el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)"; el.style.transform = "";
       }
       prev.current.set(k, r);
     });
+    prev.current.forEach((_, k) => { if (!seen.has(k)) prev.current.delete(k); });
   });
+  const slot = { width: SLOT_W, height: SLOT_H };
+  const empty = Math.max(0, limit - order.length);
   return (
-    <div data-drop="squad" className={cn("relative flex min-h-[132px] flex-wrap gap-2 rounded-lg border-2 border-dashed p-2 transition", over ? (full ? "border-blood bg-blood/10" : "border-primary bg-primary/10 shadow-[var(--shadow-glow)]") : drag ? "border-primary/40" : "border-transparent")}>
+    <div data-drop="squad" style={{ gridTemplateColumns: `repeat(auto-fill, ${SLOT_W}px)`, gap: SLOT_GAP }}
+      className={cn("relative grid rounded-lg border-2 border-dashed p-2 transition-colors", over ? (full ? "border-blood bg-blood/10" : "border-primary bg-primary/10 shadow-[var(--shadow-glow)]") : drag ? "border-primary/40" : "border-transparent")}>
       {order.map((id) => id === "__gap"
-        ? <div key="__gap" style={{ width: drag?.from === "squad" ? drag.w : 120, height: drag?.from === "squad" ? drag.h : 136 }} ref={(el) => { if (el) refs.current.set("__gap", el); else refs.current.delete("__gap"); }} className="rounded-lg border-2 border-dashed border-primary/60 bg-primary/5" />
-        : <div key={id} data-slot={id} ref={(el) => { if (el) refs.current.set(id, el); else refs.current.delete(id); }} onPointerDown={(e) => start(e, id, "squad", () => onSelect(id))} className={cn("touch-none", landing === id && "opacity-0")}>
-            <MonsterCard id={id} compact selected={id === selected} />
+        ? <div key="__gap" style={slot} ref={(el) => { if (el) refs.current.set("__gap", el); else refs.current.delete("__gap"); }} className="rounded-lg border-2 border-dashed border-primary/60 bg-primary/5" />
+        : <div key={id} data-slot={id} style={slot} ref={(el) => { if (el) refs.current.set(id, el); else refs.current.delete(id); }} onPointerDown={(e) => start(e, id, "squad", () => onSelect(id))} className={cn("touch-none select-none [&>*]:h-full [&>*]:w-full", landing === id && "opacity-0")}>
+            <MonsterCard id={id} compact selected={id === selected} partnerOf={selected} />
           </div>)}
-      {Array.from({ length: Math.max(0, limit - order.length) }).map((_, i) => <div key={`e${i}`} className="flex h-[124px] w-[96px] items-center justify-center rounded-lg border-2 border-dashed border-border text-xs text-muted-foreground">Пусто</div>)}
-      {full && <div className="absolute inset-x-0 -bottom-6 text-center text-xs font-bold text-blood">Отряд полон</div>}
+      {Array.from({ length: empty }).map((_, i) => <div key={`e${i}`} style={slot} className="flex items-center justify-center rounded-lg border-2 border-dashed border-border text-xs text-muted-foreground">Пусто</div>)}
+      {full && <div className="pointer-events-none absolute inset-x-0 -bottom-6 text-center text-xs font-bold text-blood">Отряд полон</div>}
     </div>
   );
 }
 
 /** A draggable card in the collection. */
-export function PoolCard({ id, selected, onSelect, compact }: { id: MonsterId; selected?: boolean; onSelect: () => void; compact?: boolean }) {
+export function PoolCard({ id, selected, onSelect, compact, partnerOf }: { id: MonsterId; selected?: boolean; onSelect: () => void; compact?: boolean; partnerOf?: MonsterId | undefined }) {
   const p = useProgress(); const { start, drag, landing } = useContext(Ctx);
   const owned = !!p.owned[id];
   return (
     <div data-pool={id} onPointerDown={owned ? (e) => start(e, id, "pool", onSelect) : undefined} onClick={owned ? undefined : onSelect}
       className={cn("touch-none transition-opacity", drag?.id === id && drag.from === "pool" && "opacity-40", landing === id && "opacity-60")}>
-      <MonsterCard id={id} compact={!!compact} selected={!!selected} inSquad={p.squad.includes(id)} />
+      <MonsterCard id={id} compact={!!compact} selected={!!selected} inSquad={p.squad.includes(id)} partnerOf={partnerOf} />
     </div>
   );
 }

@@ -11,8 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CampaignRouteImport } from './routes/campaign'
+import { Route as ChronicleRouteImport } from './routes/chronicle'
 import { Route as ShopRouteImport } from './routes/shop'
 import { Route as SquadRouteImport } from './routes/squad'
+import { Route as TalentsRouteImport } from './routes/talents'
 import { Route as PlayLevelIdRouteImport } from './routes/play.$levelId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -25,6 +27,11 @@ const CampaignRoute = CampaignRouteImport.update({
   path: '/campaign',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChronicleRoute = ChronicleRouteImport.update({
+  id: '/chronicle',
+  path: '/chronicle',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShopRoute = ShopRouteImport.update({
   id: '/shop',
   path: '/shop',
@@ -33,6 +40,11 @@ const ShopRoute = ShopRouteImport.update({
 const SquadRoute = SquadRouteImport.update({
   id: '/squad',
   path: '/squad',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TalentsRoute = TalentsRouteImport.update({
+  id: '/talents',
+  path: '/talents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlayLevelIdRoute = PlayLevelIdRouteImport.update({
@@ -44,38 +56,68 @@ const PlayLevelIdRoute = PlayLevelIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/campaign': typeof CampaignRoute
+  '/chronicle': typeof ChronicleRoute
   '/shop': typeof ShopRoute
   '/squad': typeof SquadRoute
+  '/talents': typeof TalentsRoute
   '/play/$levelId': typeof PlayLevelIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/campaign': typeof CampaignRoute
+  '/chronicle': typeof ChronicleRoute
   '/shop': typeof ShopRoute
   '/squad': typeof SquadRoute
+  '/talents': typeof TalentsRoute
   '/play/$levelId': typeof PlayLevelIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/campaign': typeof CampaignRoute
+  '/chronicle': typeof ChronicleRoute
   '/shop': typeof ShopRoute
   '/squad': typeof SquadRoute
+  '/talents': typeof TalentsRoute
   '/play/$levelId': typeof PlayLevelIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/campaign' | '/shop' | '/squad' | '/play/$levelId'
+  fullPaths:
+    | '/'
+    | '/campaign'
+    | '/chronicle'
+    | '/shop'
+    | '/squad'
+    | '/talents'
+    | '/play/$levelId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/campaign' | '/shop' | '/squad' | '/play/$levelId'
-  id: '__root__' | '/' | '/campaign' | '/shop' | '/squad' | '/play/$levelId'
+  to:
+    | '/'
+    | '/campaign'
+    | '/chronicle'
+    | '/shop'
+    | '/squad'
+    | '/talents'
+    | '/play/$levelId'
+  id:
+    | '__root__'
+    | '/'
+    | '/campaign'
+    | '/chronicle'
+    | '/shop'
+    | '/squad'
+    | '/talents'
+    | '/play/$levelId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CampaignRoute: typeof CampaignRoute
+  ChronicleRoute: typeof ChronicleRoute
   ShopRoute: typeof ShopRoute
   SquadRoute: typeof SquadRoute
+  TalentsRoute: typeof TalentsRoute
   PlayLevelIdRoute: typeof PlayLevelIdRoute
 }
 
@@ -95,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CampaignRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/chronicle': {
+      id: '/chronicle'
+      path: '/chronicle'
+      fullPath: '/chronicle'
+      preLoaderRoute: typeof ChronicleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/shop': {
       id: '/shop'
       path: '/shop'
@@ -107,6 +156,13 @@ declare module '@tanstack/react-router' {
       path: '/squad'
       fullPath: '/squad'
       preLoaderRoute: typeof SquadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/talents': {
+      id: '/talents'
+      path: '/talents'
+      fullPath: '/talents'
+      preLoaderRoute: typeof TalentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/play/$levelId': {
@@ -122,8 +178,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CampaignRoute: CampaignRoute,
+  ChronicleRoute: ChronicleRoute,
   ShopRoute: ShopRoute,
   SquadRoute: SquadRoute,
+  TalentsRoute: TalentsRoute,
   PlayLevelIdRoute: PlayLevelIdRoute,
 }
 export const routeTree = rootRouteImport

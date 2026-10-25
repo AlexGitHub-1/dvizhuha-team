@@ -45,7 +45,7 @@ export function Panel({ className, children, title }: { className?: string; chil
 // ---------- Rarity
 export const RARITY_TEXT: Record<Rarity, string> = { common: "text-rarity-common", rare: "text-rarity-rare", epic: "text-rarity-epic", legendary: "text-rarity-legendary", mythic: "text-rarity-mythic" };
 export const RARITY_BORDER: Record<Rarity, string> = { common: "border-rarity-common/60", rare: "border-rarity-rare", epic: "border-rarity-epic", legendary: "border-rarity-legendary", mythic: "border-rarity-mythic" };
-const RARITY_BG: Record<Rarity, string> = { common: "bg-rarity-common", rare: "bg-rarity-rare", epic: "bg-rarity-epic", legendary: "bg-rarity-legendary", mythic: "mythic-shimmer" };
+export const RARITY_BG: Record<Rarity, string> = { common: "bg-rarity-common", rare: "bg-rarity-rare", epic: "bg-rarity-epic", legendary: "bg-rarity-legendary", mythic: "mythic-shimmer" };
 export function RarityBadge({ rarity, className }: { rarity: Rarity; className?: string }) {
   return <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-background", RARITY_BG[rarity], className)}>{RARITY_INFO[rarity].name}</span>;
 }
@@ -87,7 +87,7 @@ export function Modal({ open, children, onClose }: { open: boolean; children: Re
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="animate-pop-in max-h-[90vh] w-full max-w-lg overflow-auto" onClick={(e) => e.stopPropagation()}>{children}</div>
+      <div className="animate-pop-in max-h-[90vh] w-full max-w-lg overflow-y-auto overflow-x-hidden" onClick={(e) => e.stopPropagation()}>{children}</div>
     </div>
   );
 }

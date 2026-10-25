@@ -222,6 +222,43 @@ function drawBody(g: G, kind: MonsterId, t: number, attacking: boolean) {
       teeth(g, -8, -10, 6, 3);
       g.restore(); break;
     }
+    case "ram": {
+      // two goblins pushing an iron-headed log on wheels
+      const push = Math.sin(t * 9) * 1.5 + atk * 4;
+      for (const wx of [-8, 8]) { g.fillStyle = "#3a2414"; g.beginPath(); g.arc(wx + push * 0.3, -4, 4.5, 0, TAU); g.fill(); outline(g); g.fillStyle = "#6b4a2a"; g.beginPath(); g.arc(wx + push * 0.3, -4, 1.6, 0, TAU); g.fill(); }
+      g.save(); g.translate(push, 0);
+      g.fillStyle = "#6b4322"; g.beginPath(); g.roundRect(-18, -15, 34, 9, 4); g.fill(); outline(g);
+      g.strokeStyle = "#3a2414"; g.lineWidth = 1; for (const x of [-12, -4, 4]) { g.beginPath(); g.moveTo(x, -15); g.lineTo(x, -6); g.stroke(); }
+      g.fillStyle = "#4a4a52"; g.beginPath(); g.moveTo(16, -16); g.lineTo(24, -12.5); g.lineTo(24, -8.5); g.lineTo(16, -5); g.closePath(); g.fill(); outline(g);
+      g.fillStyle = "#8a8f98"; g.beginPath(); g.arc(22, -12, 1.4, 0, TAU); g.arc(22, -9, 1.4, 0, TAU); g.fill();
+      g.fillStyle = "#2a2a30"; for (const x of [-15, 10]) g.fillRect(x, -16, 3, 11);
+      g.restore();
+      for (const [gx, ph] of [[-20, 0], [-27, 1.5]] as const) {
+        const bb = Math.abs(Math.sin(t * 9 + ph)) * 1.2;
+        g.save(); g.translate(gx, -bb);
+        legs(g, t + ph, 0, 2.5, 6, 2.5, "#4d6b22");
+        blob(g, 1, -10, 5, 5, "#7fb03a"); blob(g, 4, -17, 5, 4.5, "#86b840"); pointyEar(g, 1, -19, -6, -4, "#86b840");
+        eyes(g, 5, -18, 3, 1.3, "#ffe23a");
+        g.strokeStyle = "#86b840"; g.lineWidth = 2.5; g.beginPath(); g.moveTo(4, -11); g.lineTo(9 + push * 0.5, -11); g.stroke();
+        g.restore();
+      }
+      break;
+    }
+    case "catapult": {
+      const fire = attacking ? (Math.sin(t * 3) + 1) / 2 : 0;
+      for (const wx of [-9, 9]) { g.fillStyle = "#3a2414"; g.beginPath(); g.arc(wx, -5, 5, 0, TAU); g.fill(); outline(g); g.strokeStyle = "#6b4a2a"; g.lineWidth = 1; g.beginPath(); g.moveTo(wx - 4, -5); g.lineTo(wx + 4, -5); g.moveTo(wx, -9); g.lineTo(wx, -1); g.stroke(); }
+      g.fillStyle = "#6b4322"; g.fillRect(-14, -12, 28, 5); g.strokeStyle = "rgba(10,6,4,0.75)"; g.lineWidth = 1.2; g.strokeRect(-14, -12, 28, 5);
+      g.fillStyle = "#5a3a1a"; g.beginPath(); g.moveTo(-3, -12); g.lineTo(0, -26); g.lineTo(3, -12); g.fill(); outline(g);
+      g.save(); g.translate(0, -24); g.rotate(-0.5 - fire * 1.6);
+      g.fillStyle = "#7a5030"; g.fillRect(-20, -1.5, 26, 3); outline(g);
+      g.fillStyle = "#3a2414"; g.beginPath(); g.arc(-20, -2, 4, 0, Math.PI); g.fill();
+      if (fire < 0.6) { g.fillStyle = "#ff6a1a"; g.beginPath(); g.arc(-20, -4, 3, 0, TAU); g.fill(); g.fillStyle = "#ffd040"; g.beginPath(); g.arc(-20, -5, 1.5, 0, TAU); g.fill(); }
+      g.fillStyle = "#2a2a30"; g.fillRect(4, -4, 6, 6);
+      g.restore();
+      // goblin crew
+      g.save(); g.translate(-18, 0); legs(g, t, 0, 2.5, 6, 2.5, "#4d6b22"); blob(g, 0, -10, 5, 5, "#7fb03a"); blob(g, 2, -17, 5, 4.5, "#86b840"); pointyEar(g, -2, -19, -6, -4, "#86b840"); eyes(g, 3, -18, 3, 1.3, "#ffe23a"); g.restore();
+      break;
+    }
     case "larva": {
       for (let i = 0; i < 4; i++) blob(g, -6 + i * 3.5, -3 - Math.abs(Math.sin(t * 8 + i)) * 2, 3.2, 3, i === 3 ? "#d8e8a0" : "#c4d88a");
       g.fillStyle = "#111"; g.beginPath(); g.arc(6.5, -5, 0.9, 0, TAU); g.fill(); break;
