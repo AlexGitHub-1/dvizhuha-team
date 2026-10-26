@@ -2,6 +2,8 @@ import { COLLECTIBLE, MONSTERS, STARTERS, type MonsterId } from "../data/monster
 import { RARITIES, type Rarity } from "../data/rarity";
 import { CASES, SPELLS, type CaseId, type SpellId } from "../data/shop";
 import { LEVELS, REC_TIER, type LevelDef } from "../data/levels";
+import { LOCATIONS } from "../data/locations";
+import type { TowerKind } from "../data/towers";
 import { ACCUSE_RIGHT, CLUES, SUSPECTS, type ClueId, type SuspectId, type SuspectStatus } from "../data/story";
 import { SYNERGIES, TALENTS, type SynergyId, type TalentId } from "../data/synergies";
 
@@ -33,6 +35,8 @@ export interface Progress {
   losses?: Record<number, number>;
   /** one-time 30% discount on the next upgrade (Horde Support tier 3) */
   mercyDiscount?: boolean;
+  /** cosmetic achievements (see meta/achievements.ts) */
+  ach?: import("./achievements").AchState;
 }
 
 export function defaultProgress(): Progress {
@@ -48,7 +52,7 @@ export const RARITY_GROWTH: Record<Rarity, number> = { common: 1, rare: 1.25, ep
 /** Level cap by rarity: commons stop at 6, rares at 8, epic+ at 10. */
 export const RARITY_MAX_LVL: Record<Rarity, number> = { common: 6, rare: 8, epic: 10, legendary: 10, mythic: 10 };
 export function maxLvl(id: MonsterId) { return RARITY_MAX_LVL[MONSTERS[id].rarity]; }
-export function statMul(lvl: number, rarity: Rarity = "common") { return 1 + 0.12 * RARITY_GROWTH[rarity] * (lvl - 1); }
+export function statMul(lvl: number, rarity: Rarity = "common") { return 1 + (rarity === "common" ? 0.09 : 0.12) * RARITY_GROWTH[rarity] * (lvl - 1); }
 /** Base worth of one fighter of each rarity for the squad power number. */
 export const RARITY_POWER: Record<Rarity, number> = { common: 1, rare: 1.35, epic: 1.8, legendary: 2.4, mythic: 3 };
 export function unitPower(id: MonsterId, lvl: number) { const r = MONSTERS[id].rarity; return Math.round(100 * RARITY_POWER[r] * statMul(Math.min(lvl, RARITY_MAX_LVL[r]), r)); }
@@ -144,9 +148,9 @@ export function rollRarity(odds: Partial<Record<Rarity, number>>, r: number): Ra
   for (const k of RARITIES) { const w = odds[k] ?? 0; if (w <= 0) continue; if (x < w) return k; x -= w; }
   return RARITIES.filter((k) => (odds[k] ?? 0) > 0).at(-1)!;
 }
-export const DUPLICATE_SHARDS: Record<Rarity, number> = { common: 2, rare: 2, epic: 3, legendary: 4, mythic: 5 };
+export const DUPLICATE_SHARDS: Record<Rarity, number> = { common: 3, rare: 3, epic: 4, legendary: 5, mythic: 6 };
 /** Every 10th open without epic+ is guaranteed at least epic. */
-export const PITY_AT = 10;
+export const PITY_AT = 8;
 /** Every 40th open without legendary+ is guaranteed legendary. */
 export const LEGEND_PITY_AT = 40;
 /** Case odds improve with campaign progress: each cleared region moves weight from common to rare+. */
@@ -199,10 +203,10 @@ export function defenseMemory(p: Progress, levelId: number, kinds: string[]): st
   return d.modes.slice(0, Math.floor(d.modes.length * share));
 }
 export function starsFor(o: BattleOutcome) { return !o.won ? 0 : o.timeLeftFrac > 0.5 ? 3 : o.timeLeftFrac > 0.25 ? 2 : 1; }
-/** First win pays 1.35x, repeat wins 0.5x, losses 0.45x–0.65x by gate damage; +3 per tower destroyed. */
+/** First win pays 1.35x, repeat wins 0.32x, losses 0.45x–0.65x by gate damage; +3 per tower destroyed. */
 export function battleReward(level: LevelDef, prevStars: number, o: BattleOutcome, streak = 0) {
   const stars = starsFor(o);
-  const k = o.won ? (prevStars === 0 ? 1.35 : 0.5) : Math.max(0.45 + 0.2 * o.gateFrac, mercyBonuses(mercyTier(streak)).lossGoldK);
+  const k = o.won ? (prevStars === 0 ? 1.35 : 0.32) : Math.max(0.45 + 0.2 * o.gateFrac, mercyBonuses(mercyTier(streak)).lossGoldK);
   const gold = Math.round(level.gold * k + o.towersDown * 3);
   const newStars = Math.max(0, stars - prevStars);
   const skulls = o.won ? newStars * 2 + (prevStars === 0 ? 3 : 0) : 0;
@@ -345,13 +349,20 @@ export function migrateStarters(p: Progress): Progress {
 }
 
 // ---- defeat advice
-export interface DefeatInfo { gateFrac: number; towersDown: number; summoned: number; reached?: number; timeOut?: boolean }
+export interface DefeatInfo { gateFrac: number; towersDown: number; summoned: number; reached?: number; timeOut?: boolean; feats?: Partial<Record<"aegis" | "tar" | "stones" | "backline" | "cross", number>>; wasted?: number }
 /** One tip for the defeat screen, chosen from what most likely went wrong. */
 export function defeatTip(p: Progress, d: DefeatInfo): string {
   const up = p.squad.filter((id) => canUpgrade(p, id)).sort((a, b) => (p.owned[a]?.lvl ?? 0) - (p.owned[b]?.lvl ?? 0))[0];
   if (d.reached !== undefined && d.summoned >= 6 && d.reached / d.summoned < 0.2) return "Отряд выкосили на подходе. Пусти вперёд танка (Тролль, Голем, Щитоносец): башни держат первую цель, а хрупкие бойцы проходят за ним.";
   if (up) return `Улучши «${MONSTERS[up].name}» в лагере — золота уже хватает.`;
   if (d.timeOut && d.gateFrac < 0.6 && (d.reached ?? 0) >= 5) return "Бойцы дошли, но не хватило осадного урона. Возьми Таран или Подрывника для решающего удара.";
+  const f = d.feats ?? {};
+  if ((f.aegis ?? 0) >= 2) return "Магические обелиски ставили щиты соседям и гасили твои взрывы. Сначала снеси обелиск — потом его подопечных.";
+  if ((f.backline ?? 0) >= 4) return "Баллисты и шпили стреляли по тылу, пока танк держал огонь. Пусти второго танка или щитоносца рядом с поддержкой.";
+  if ((f.stones ?? 0) >= 6) return "Камни со стен накрывали толпу у ворот. Не стой кучей под створками: тень на земле — сигнал отойти, тараны и подрывники бьют быстрее.";
+  if ((f.tar ?? 0) >= 12) return "Смола тормозила отряд. Шаманская аура и «Марш» помогают проскочить, а горящую смолу лучше переждать.";
+  if ((f.cross ?? 0) >= 3) return "Пушки стреляли сдвоенными залпами и сбивали вампиризм. Разводи тяжёлых бойцов, чтобы две пушки не брали одну цель.";
+  if ((d.wasted ?? 0) >= 250) return `${d.wasted} эссенции сгорело впустую: бойцы погибли, не дойдя до башен. Выпускай их волной за танком.`;
   if (d.gateFrac < 0.3) return "Совсем чуть-чуть! Копи эссенцию и выпускай всех разом в конце.";
   if (activeSynergies(p.squad).length === 0) return "Собери синергию в отряде — например, 2 нежити дают Легион Тьмы.";
   if (d.towersDown === 0) return "Башни целы: отправь подрывников и троллей ломать их по пути.";
@@ -390,3 +401,34 @@ export function accusationOpen(p: Progress) { return !!p.story?.["e3"] && !p.acc
 export function accuse(p: Progress, s: SuspectId): Progress { return p.accusation ? p : { ...p, accusation: s }; }
 export function accusationScene(s: SuspectId) { return s === ACCUSE_RIGHT ? "acc_right" : "acc_" + s; }
 export function accusedRight(p: Progress) { return p.accusation === ACCUSE_RIGHT; }
+
+// ---- pre-battle garrison scouting and the defeat breakdown (pure, tested in src/test/insight.test.ts)
+export interface ScoutLine { icon: string; text: string; tone: "warn" | "good" | "info" }
+/** What the garrison of this level will do, and how the chosen squad fits against it. */
+export function garrisonScout(level: LevelDef, squad: MonsterId[]): ScoutLine[] {
+  const kinds = new Set<TowerKind>([...level.towers, ...level.buildKinds]); const n = (k: TowerKind) => level.towers.filter((t) => t === k).length;
+  const out: ScoutLine[] = []; const defs = squad.map((id) => MONSTERS[id]);
+  const loc = LOCATIONS[level.loc]!; out.push({ icon: "🧩", text: `${loc.puzzle.name}: ${loc.puzzle.hint}`, tone: "info" });
+  const heavy = n("cannon") + n("ballista");
+  if (heavy >= 3) out.push({ icon: "💥", text: `Много тяжёлых орудий (${heavy}) — они бьют сдвоенными залпами и отключают вампиризм.`, tone: "warn" });
+  if (kinds.has("mage") && level.loc >= 1) out.push({ icon: "🔮", text: "Обелиски ставят щит на соседнюю башню — он гасит первый взрыв или удар тарана.", tone: "warn" });
+  if (level.loc >= 1) out.push({ icon: "🛢", text: kinds.has("flame") ? "Смола на дороге замедляет вдвое, а огненные алтари её поджигают." : "Каждые 15 с гарнизон льёт смолу впереди отряда — она замедляет вдвое.", tone: "warn" });
+  out.push({ icon: "🪨", text: "С парапета сбрасывают камни на толпу у ворот — тень на земле предупреждает об ударе.", tone: "info" });
+  if (kinds.has("ballista") || kinds.has("frost")) out.push({ icon: "🎯", text: "Баллисты и ледяные шпили стреляют в тыл, если танк уже под огнём двух башен.", tone: "warn" });
+  if (kinds.has("bell") && defs.some((d) => d.stealth || d.rebirth)) out.push({ icon: "🔔", text: "Святые колокола видят невидимых — Призрак и Феникс здесь раскрыты.", tone: "warn" });
+  if (loc.puzzle.mode === "air" && defs.some((d) => d.flying)) out.push({ icon: "🏹", text: "Зенитный огонь: летуны получают усиленный урон.", tone: "warn" });
+  if (loc.puzzle.mode === "splash" && defs.some((d) => d.swarm)) out.push({ icon: "☠", text: "Картечь режет стаи — крысы здесь тают.", tone: "warn" });
+  if (loc.puzzle.mode === "pierce" && defs.filter((d) => d.armor >= 0.3).length >= 2) out.push({ icon: "🛡", text: "Бронебой: толстая броня твоих бойцов здесь работает вполсилы.", tone: "warn" });
+  if (defs.some((d) => d.runeAura) && (kinds.has("mage") || kinds.has("bell"))) out.push({ icon: "✋", text: "Глушитель Рун выключит обелиски и колокола — и их щиты.", tone: "good" });
+  if (!squad.some((id) => MONSTERS[id].hp >= 330 && !MONSTERS[id].ranged && !MONSTERS[id].flying)) out.push({ icon: "⚠", text: "В отряде нет танка — башни будут бить по хрупким бойцам.", tone: "warn" });
+  else if (squad.some((id) => { const d = MONSTERS[id]; return !!(d.aura || d.shieldAura || d.raise || d.runeAura || d.ranged); })) out.push({ icon: "⚔", text: "Выпусти поддержку в течение 1.5 с после танка — «Волна прорыва» даст им +20% скорости.", tone: "good" });
+  for (const syn of activeSynergies(squad)) { const s = SYNERGIES.find((x) => x.id === syn); if (s) out.push({ icon: s.icon, text: `Синергия «${s.name}» активна.`, tone: "good" }); }
+  return out;
+}
+export interface DefeatBreakdown { killer: { kind: TowerKind; share: number } | null; wasted: number; longest: { kind: MonsterId; t: number } | null }
+/** Which tower dealt the biggest share of damage to the horde, how much essence died without reaching a tower, who lived longest. */
+export function defeatBreakdown(towers: { kind: TowerKind; dealt: number }[], wasted: number, longest: { kind: MonsterId; t: number } | null): DefeatBreakdown {
+  const total = towers.reduce((s, t) => s + t.dealt, 0);
+  const top = towers.reduce<{ kind: TowerKind; dealt: number } | null>((a, t) => (!a || t.dealt > a.dealt ? t : a), null);
+  return { killer: top && total > 0 ? { kind: top.kind, share: Math.round((top.dealt / total) * 100) } : null, wasted: Math.round(wasted), longest };
+}

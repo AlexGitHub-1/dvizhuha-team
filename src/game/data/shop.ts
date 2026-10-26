@@ -16,7 +16,7 @@ export const SPELL_ORDER: SpellId[] = ["march", "bloodrain", "darkness", "raise"
 export type CaseId = "rusty" | "cursed" | "legend";
 export interface CaseDef { id: CaseId; name: string; desc: string; price: number; currency: "gold" | "skulls"; odds: Partial<Record<Rarity, number>> }
 export const CASES: CaseDef[] = [
-  { id: "rusty", name: "Ржавый сундук", desc: "Старый сундук с поля боя.", price: 220, currency: "gold", odds: { common: 62, rare: 30, epic: 7, legendary: 1 } },
+  { id: "rusty", name: "Ржавый сундук", desc: "Старый сундук с поля боя.", price: 180, currency: "gold", odds: { common: 54, rare: 36, epic: 9, legendary: 1 } },
   { id: "cursed", name: "Проклятый ларец", desc: "Шепчет по ночам.", price: 18, currency: "skulls", odds: { rare: 50, epic: 38, legendary: 10, mythic: 2 } },
   { id: "legend", name: "Реликварий Бездны", desc: "Только для истинных владык.", price: 60, currency: "skulls", odds: { epic: 60, legendary: 32, mythic: 8 } },
 ];

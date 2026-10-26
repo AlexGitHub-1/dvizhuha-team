@@ -14,9 +14,9 @@ describe("rarity caps", () => {
   });
 });
 describe("economy", () => {
-  it("a repeat win pays 50% of level gold", () => {
+  it("a repeat win pays 32% of level gold", () => {
     const w = { won: true, gateFrac: 1, towersDown: 0, timeLeftFrac: 0.6 };
-    expect(battleReward(LEVELS[5]!, 1, w).gold).toBe(Math.round(LEVELS[5]!.gold * 0.5));
+    expect(battleReward(LEVELS[5]!, 1, w).gold).toBe(Math.round(LEVELS[5]!.gold * 0.32));
   });
   it("the 40th case without a legendary is legendary", () => {
     const p = { ...defaultProgress(), gold: 220, pity: 0, pityLeg: LEGEND_PITY_AT - 1 };

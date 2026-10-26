@@ -1,3 +1,4 @@
+import { achReset } from "@/game/meta/achievements";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -31,12 +32,13 @@ function Talents() {
   const p = useProgress();
   const free = freeStars(p), total = totalStars(p);
   const [sel, setSel] = useState(TALENTS[0]!.id);
+  const [ask, setAsk] = useState(false);
   const [burst, setBurst] = useState<{ id: string; r: number; k: number } | null>(null);
   const t = TALENTS.find((x) => x.id === sel)!;
   const rank = p.talents?.[t.id] ?? 0; const cost = talentCost(p, t.id); const max = rank >= t.costs.length;
   const buy = (id: typeof sel) => {
     const n = buyTalent(getProgress(), id); if (!n) return;
-    setProgress(n); sfx.levelUp(); setBurst({ id, r: (n.talents[id] ?? 1) - 1, k: performance.now() });
+    setProgress(n); setAsk(false); sfx.levelUp(); setBurst({ id, r: (n.talents[id] ?? 1) - 1, k: performance.now() });
   };
   const pos = (i: number, r: number) => { const a = (ANGLES[i]! * Math.PI) / 180, d = R0 + STEP * (r + 1); return [C + Math.sin(a) * d, C - Math.cos(a) * d] as const; };
 
@@ -72,7 +74,7 @@ function Talents() {
                 const [x, y] = pos(i, k); const owned = k < r; const nextUp = k === r; const can = nextUp && free >= c;
                 return (
                   <button key={tl.id + k} aria-label={`${tl.name} ранг ${k + 1}`}
-                    onClick={() => { setSel(tl.id); if (can) buy(tl.id); }}
+                    onClick={() => { setSel(tl.id); setAsk(false); sfx.click(); }}
                     className={cn("absolute flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-2 text-xl transition hover:scale-110",
                       owned ? "border-gold bg-[color-mix(in_oklab,var(--gold)_25%,var(--card))] shadow-[0_0_18px_var(--gold)]" : can ? "border-gold bg-card animate-soft-pulse" : "border-border bg-card [&>span]:opacity-50",
                       sel === tl.id && k === Math.min(r, tl.costs.length - 1) && "outline outline-2 outline-offset-2 outline-primary")}
@@ -99,11 +101,21 @@ function Talents() {
             <div className="flex justify-between"><span className="text-muted-foreground">Сейчас</span><span>{rank > 0 ? t.desc(rank) : "не изучено"}</span></div>
             {!max && <div className="flex justify-between"><span className="text-muted-foreground">Дальше</span><span className="text-poison">{t.desc(rank + 1)}</span></div>}
           </div>
-          <GameButton variant="gold" className={cn("mt-4 w-full", !max && cost !== null && free >= cost && "animate-soft-pulse")} disabled={max || cost === null || free < cost} onClick={() => buy(t.id)}>
-            {max ? "Максимум" : cost !== null && free < cost ? `Нужно ★ ${cost} · есть ${free}` : `Изучить · ★ ${cost}`}
-          </GameButton>
+          {ask && !max && cost !== null && free >= cost ? (
+            <div className="mt-4 rounded-lg border border-gold/60 bg-gold/10 p-3">
+              <p className="text-sm">Изучить «{t.name}» ранг {rank + 1} за ★ {cost}?</p>
+              <div className="mt-2 flex gap-2">
+                <GameButton variant="gold" className="flex-1" onClick={() => buy(t.id)}>Да, изучить</GameButton>
+                <GameButton variant="ghost" className="flex-1" onClick={() => setAsk(false)}>Отмена</GameButton>
+              </div>
+            </div>
+          ) : (
+            <GameButton variant="gold" className={cn("mt-4 w-full", !max && cost !== null && free >= cost && "animate-soft-pulse")} disabled={max || cost === null || free < cost} onClick={() => setAsk(true)}>
+              {max ? "Максимум" : cost !== null && free < cost ? `Нужно ★ ${cost} · есть ${free}` : `Изучить · ★ ${cost}`}
+            </GameButton>
+          )}
           <p className="mt-4 text-xs text-muted-foreground">Звёзды за уровни кампании превращаются в постоянные бонусы для всей Орды.</p>
-          <div data-tut="reset" className="mt-3 w-fit"><GameButton size="sm" variant="ghost" onClick={() => setProgress(resetTalents(getProgress()))}>↺ Сбросить бесплатно</GameButton></div>
+          <div data-tut="reset" className="mt-3 w-fit"><GameButton size="sm" variant="ghost" onClick={() => setProgress(achReset(resetTalents(getProgress())))}>↺ Сбросить бесплатно</GameButton></div>
         </Panel>
       </div>
     </ScreenShell>

@@ -1,3 +1,7 @@
+import { ACHIEVEMENTS } from "@/game/data/achievements";
+import { SECRET_SCENES } from "@/game/data/story";
+import { hasAch, secretSceneOpen } from "@/game/meta/achievements";
+import { achAccuse, achRewatch } from "@/game/meta/achievements";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { createPortal } from "react-dom";
@@ -55,7 +59,7 @@ function Chronicle() {
   const seenCount = SCENES.filter((s) => p.story?.[s.id]).length;
   const clueCount = Object.keys(CLUES).filter((c) => p.clues?.[c]).length;
 
-  const play = (id: string) => { sfx.whoosh(); setFlip(true); setTimeout(() => { setFlip(false); setOpen(id); }, 550); };
+  const play = (id: string) => { setProgress((q) => achRewatch(q, id)); sfx.whoosh(); setFlip(true); setTimeout(() => { setFlip(false); setOpen(id); }, 550); };
   const chapters = SCENES.map((s, k) => ({ s, k })).filter(({ s }) => s.loc === loc);
   const cd = CHARS[char];
   const notes = (cd.notes ?? []).filter((n) => p.story?.[n.after]);
@@ -173,8 +177,8 @@ function Chronicle() {
               return (
                 <div key={s} className="absolute w-[18%] -translate-x-1/2 text-center" style={{ left: `${SUS_POS[s]}%`, top: `${SUS_Y - 4}%` }}>
                   <div className="mx-auto grid h-12 w-12 place-items-center rounded-full border-2 border-ink/50 bg-vellum text-2xl shadow-lg">{st === "unknown" ? "?" : d.icon}</div>
-                  <p className="mt-1 text-xs font-bold text-vellum drop-shadow">{st === "unknown" ? "???" : d.name}</p>
-                  <span className={cn("mt-1 inline-block -rotate-3 rounded border-2 px-1.5 text-[10px] font-bold uppercase tracking-wider", STATUS[st].cls)}>{STATUS[st].label}</span>
+                  <p className="mt-1 truncate text-xs font-bold text-vellum drop-shadow">{st === "unknown" ? "???" : d.name}</p>
+                  <span className={cn("mt-1 inline-block max-w-[92%] truncate whitespace-nowrap rounded border px-1 text-[9px] font-bold uppercase leading-4 tracking-normal sm:text-[10px]", STATUS[st].cls)}>{STATUS[st].label}</span>
                 </div>
               );
             })}
@@ -193,6 +197,19 @@ function Chronicle() {
         <div className="pointer-events-none fixed z-[200] w-64 -translate-x-1/2 rounded-md border-2 border-wax bg-vellum p-3 text-sm text-ink shadow-[var(--shadow-deep)] animate-stagger-in" style={{ left: Math.min(Math.max(tip.x, 140), window.innerWidth - 140), top: Math.min(tip.y + 10, window.innerHeight - 160) }}>
           <p className="mb-1 font-display text-base">{CLUES[tip.c].icon} {CLUES[tip.c].name}</p>{CLUES[tip.c].text}
         </div>, document.body)}
+      <section className="panel-texture mt-4 rounded-2xl border-2 border-primary/40 bg-card/90 p-5">
+        <div className="mb-3 flex items-end justify-between"><h3 className="font-display text-xl uppercase tracking-widest text-primary">Тайное</h3><span className="text-xs text-muted-foreground">Страницы открываются за деяния</span></div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {SECRET_SCENES.map((s) => { const on = secretSceneOpen(p, s.id); const by = ACHIEVEMENTS.find((d) => d.reward.scene === s.id)!;
+            return (
+              <button key={s.id} disabled={!on} onClick={() => play(s.id)} className={cn("rounded-xl border-2 p-3 text-left transition", on ? "border-gold/60 bg-vellum text-ink hover:-translate-y-0.5" : "border-border bg-muted/50 text-muted-foreground")}>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-wax">{on ? "Тайная страница" : "Запечатано воском"}</div>
+                <div className="font-display leading-tight">{on ? s.title.replace("Тайное: ", "") : "???"}</div>
+                <div className="mt-1 text-xs italic">{on ? `«${s.epigraph}»` : `Деяние: ${by.secret && !hasAch(p, by.id) ? "тайное" : `«${by.name}»`}`}</div>
+              </button>
+            ); })}
+        </div>
+      </section>
     </ScreenShell>
   );
 }
@@ -223,7 +240,7 @@ function AccusePanel({ onPlay }: { onPlay: (id: string) => void }) {
           </button>
         ))}
       </div>
-      <button disabled={!pick} onClick={() => { if (!pick) return; setProgress((x) => accuse(x, pick)); onPlay(accusationScene(pick)); }}
+      <button disabled={!pick} onClick={() => { if (!pick) return; setProgress((x) => x.accusation ? x : achAccuse(accuse(x, pick), pick)); onPlay(accusationScene(pick)); }}
         className="mt-3 w-full rounded-lg border-2 border-blood bg-blood/80 py-2 font-display uppercase text-foreground transition enabled:hover:bg-blood disabled:opacity-40">
         {pick ? `Обвинить: ${SUSPECTS[pick].name}` : "Выбери подозреваемого"}
       </button>

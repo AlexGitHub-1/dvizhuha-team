@@ -1,3 +1,4 @@
+import { achSkip } from "@/game/meta/achievements";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
@@ -5,7 +6,7 @@ import { CHARS, CLUES, SCENES, SCENE_BY_ID, type CharId, type ClueId } from "@/g
 import { LOCATIONS } from "@/game/data/locations";
 import { markClue } from "@/game/meta/progress";
 import { setProgress } from "@/game/meta/store";
-import { sfx, startScene, stopScene, unlockAudio } from "@/game/audio";
+import { resumeAmbient, sfx, startScene, stopScene, unlockAudio } from "@/game/audio";
 import { CharArt, StoryBackdrop, TONE_BG, TONE_BORDER, TONE_TEXT } from "./StoryArt";
 
 type Phase = "intro" | "play" | "outro";
@@ -56,7 +57,13 @@ export function Cutscene({ sceneId, onDone }: { sceneId: string; onDone: () => v
     return { left, right };
   }, [i, scene]);
 
-  useEffect(() => { setMounted(true); unlockAudio(); startScene(LOCATIONS[scene.loc]!.theme, false); return () => stopScene(); }, [scene.loc]);
+  useEffect(() => { setMounted(true); unlockAudio(); startScene(LOCATIONS[scene.loc]!.theme, false); return () => { stopScene(); resumeAmbient(); }; }, [scene.loc]);
+  // the page underneath must not scroll while the cutscene covers it
+  useEffect(() => {
+    const h = document.documentElement, b = document.body; const ph = h.style.overflow, pb = b.style.overflow;
+    h.style.overflow = "hidden"; b.style.overflow = "hidden";
+    return () => { h.style.overflow = ph; b.style.overflow = pb; };
+  }, []);
   useEffect(() => { if (phase !== "intro") return; const t = setTimeout(() => setPhase("play"), 3200); return () => clearTimeout(t); }, [phase]);
   useEffect(() => { if (phase !== "outro") return; sfx.chest(); const t = setTimeout(() => doneRef.current(), 2200); return () => clearTimeout(t); }, [phase]);
   useEffect(() => {
@@ -64,7 +71,13 @@ export function Cutscene({ sceneId, onDone }: { sceneId: string; onDone: () => v
     setTyped(0);
     if (line.fx === "shake") sfx.ram(); else if (line.fx === "flash") sfx.whoosh();
     if (line.clue) { const c = line.clue; setProgress((q) => markClue(q, c)); setClue({ id: c, k: i }); sfx.coins(); }
-    const t = setInterval(() => setTyped((n) => { if (n >= line.text.length) { clearInterval(t); return n; } return n + 1; }), line.style === "whisper" ? 34 : 22);
+    let k = 0;
+    const t = setInterval(() => {
+      // every few letters the speaker mumbles a syllable in their own voice
+      if (k % 3 === 0 && line.who !== "narrator" && /[A-Za-zА-Яа-яЁё]/.test(line.text[k] ?? "")) sfx.babble(line.who, line.text[k]!, line.style);
+      k++;
+      setTyped((n) => { if (n >= line.text.length) { clearInterval(t); return n; } return n + 1; });
+    }, line.style === "whisper" ? 34 : 22);
     return () => clearInterval(t);
   }, [i, line, phase]);
 
@@ -133,7 +146,7 @@ export function Cutscene({ sceneId, onDone }: { sceneId: string; onDone: () => v
         <p className="font-display text-sm tracking-[0.3em] text-gold/80">ГЛАВА {chapter}: {loc.name.toUpperCase()} · {scene.title.toUpperCase()}</p>
         <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
           <button className="rounded-md border border-gold/40 bg-card/80 px-3 py-1 text-sm hover:border-gold" onClick={() => setLog((v) => !v)}>📜 История</button>
-          <button className="rounded-md border border-gold/40 bg-card/80 px-3 py-1 text-sm hover:border-gold" onClick={() => doneRef.current()}>Пропустить ⏭</button>
+          <button className="rounded-md border border-gold/40 bg-card/80 px-3 py-1 text-sm hover:border-gold" onClick={() => { setProgress(achSkip); doneRef.current(); }}>Пропустить ⏭</button>
         </div>
       </header>
 

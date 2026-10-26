@@ -1,6 +1,9 @@
-import { sfx, unlockAudio } from "@/game/audio";
+import { SplashScreen } from "@/components/ui-kit/SplashScreen";
+import { AchievementToast } from "@/components/ui-kit/AchievementToast";
+import { resumeAmbient, setAmbient, sfx, unlockAudio } from "@/game/audio";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  useRouterState,
   Outlet,
   Link,
   createRootRouteWithContext,
@@ -14,6 +17,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { loadProgress } from "../game/meta/store";
+import { loadSettings } from "../game/meta/settings";
 
 function NotFoundComponent() {
   return (
@@ -94,7 +98,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Archivo+Black&family=Russo+One&family=Rubik:wght@400;500;700&display=swap" },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
     ],
   }),
   shellComponent: RootShell,
@@ -119,13 +123,23 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  useEffect(() => { loadProgress(); }, []);
+  useEffect(() => { loadProgress(); loadSettings(); }, []);
+  // one background tune across all non-battle screens; the map tune also plays on the battle-prep screen
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => { setAmbient(path.startsWith("/campaign") || path.startsWith("/play") ? "map" : "menu"); }, [path]);
+  useEffect(() => {
+    const go = () => { unlockAudio(); resumeAmbient(); };
+    window.addEventListener("pointerdown", go); window.addEventListener("keydown", go);
+    return () => { window.removeEventListener("pointerdown", go); window.removeEventListener("keydown", go); };
+  }, []);
   useEffect(() => { const on = (e: MouseEvent) => { if ((e.target as HTMLElement | null)?.closest?.("a[href]")) { unlockAudio(); sfx.stone(); } }; document.addEventListener("click", on, true); return () => document.removeEventListener("click", on, true); }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <AchievementToast />
+      <SplashScreen />
     </QueryClientProvider>
   );
 }

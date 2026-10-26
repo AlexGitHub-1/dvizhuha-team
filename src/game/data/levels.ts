@@ -85,11 +85,15 @@ export const MAPS: MapDef[] = NAMES.map((name, i) => ({ name, theme: LOCATIONS[M
 
 /** Tower strength per level: bot with the REC_TIER squad (no talents, smart towers on) wins 4 of 10 seeds (bosses 3 of 10), region puzzle on. */
 const TOWER_MUL_BOT = [1.281, 1.406, 1.078, 1.016, 1.063, 1.375, 1.750, 1.813, 0.984, 0.938, 1.313, 1.172, 1.484, 2.438, 2.000, 1.078, 2.625, 2.297, 2.750, 2.375, 1.297, 1.219, 0.859, 0.953];
-/** Real players play better than the bot (spell timing, tank + damage combos): regions III–V get this extra edge; I–II stay gentle and VI is already at the edge of the best squad. */
-export const HUMAN_EDGE = 1.1;
-const TOWER_MUL = TOWER_MUL_BOT.map((m, i) => +(m * (i >= 8 && i < 20 ? HUMAN_EDGE : 1)).toFixed(3));
+/** Real players play far better than the bot (spell timing, tank + damage combos): every region gets an extra edge, growing from region III on. */
+export const HUMAN_EDGE = 0.85;
+/** Levels 14+ after the fighter nerfs: eased so epic squads (not only legendary) can clear them. */
+export const LATE_EASE = 0.72;
+/** Garrison AI v3 (overwatch, aegis, crossfire, tar, gate stones): per-level factor so the bot with the REC_TIER squad wins exactly 4 of 10 (bosses 3 of 10) at the final value — the old human edge is now spent on the smarter towers. */
+const AI_RECAL = [0.909, 0.950, 0.940, 0.838, 1.163, 1.234, 1.265, 1.143, 1.316, 1.224, 1.072, 1.143, 1.377, 1.204, 1.194, 1.478, 0.940, 0.950, 1.011, 1.052, 1.062, 1.041, 1.204, 0.85];
+const TOWER_MUL = TOWER_MUL_BOT.map((m, i) => +(AI_RECAL[i]! * m * (i < 4 ? 0.85 : i < 8 ? 0.95 : i < 13 ? HUMAN_EDGE : i < 16 ? LATE_EASE : (i === 16 || i === 18 || i === 19 ? 0.5 : i < 20 ? 0.62 : i === 23 ? 1.1 : 0.8) * LATE_EASE)).toFixed(3));
 /** Squad the level is calibrated against (rarity + level of all 5 fighters); same bot run as TOWER_MUL_BOT. */
-export const REC_TIER: { rarity: "common" | "rare" | "epic"; lvl: number }[] = ["c2","c3","c3","c4","c4","c5","c5","c6","r4","r5","r6","r6","r7","r8","r8","e6","e7","e8","e9","e9","e10","e10","e10","e10"]
+export const REC_TIER: { rarity: "common" | "rare" | "epic"; lvl: number }[] = ["c3","c5","c5","c6","r4","r5","r5","r5","r5","r7","r7","r7","r7","r7","r7","r7","e9","e9","e10","e10","e10","e10","e10","e10"]
   .map((t) => ({ rarity: (({ c: "common", r: "rare", e: "epic" }) as const)[t[0] as "c" | "r" | "e"], lvl: +t.slice(1) }));
 export const RECOMMENDED_LVL = REC_TIER.map((t) => t.lvl);
 const TIER_NAME = { common: "обычные", rare: "редкие", epic: "эпические" } as const;

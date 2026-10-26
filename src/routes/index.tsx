@@ -1,3 +1,5 @@
+import { ACHIEVEMENTS, FRAMES } from "@/game/data/achievements";
+import { hasAch, hasJoke } from "@/game/meta/achievements";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import type React from "react";
@@ -5,11 +7,11 @@ import { Tooltip } from "@/components/ui-kit";
 import { SYNERGIES } from "@/game/data/synergies";
 import { MONSTERS } from "@/game/data/monsters";
 import { cn } from "@/lib/utils";
-import { Currency, GameButton, gameButton, LiveBackdrop, MonsterPortrait, Panel, StatBar } from "@/components/ui-kit";
+import { Currency, CurrencyIcon, GameButton, gameButton, LiveBackdrop, MonsterPortrait, Panel, StatBar } from "@/components/ui-kit";
 import { Wallet } from "@/components/ui-kit/MonsterCard";
 import { getProgress, setProgress, useProgress } from "@/game/meta/store";
 import { sfx } from "@/game/audio";
-import { resetTutorials, squadLimit, synergyCount, freeStars, nextLevelId, rewardsReady, squadUpgradeReady, claimDaily, claimQuest, DAILY, dailyAvailable, dayKey, highestCleared, nextStreak, QUESTS, questState, requiredPower, squadPower } from "@/game/meta/progress";
+import { squadLimit, synergyCount, freeStars, nextLevelId, rewardsReady, squadUpgradeReady, claimDaily, claimQuest, DAILY, dailyAvailable, dayKey, highestCleared, nextStreak, QUESTS, questState, requiredPower, squadPower } from "@/game/meta/progress";
 import { LEVELS, recLabel } from "@/game/data/levels";
 
 export const Route = createFileRoute("/")({
@@ -37,14 +39,10 @@ function Menu() {
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => { setToday(dayKey(new Date())); }, []);
   const stars = freeStars(p); const upg = squadUpgradeReady(p); const rew = today ? rewardsReady(p, today) : false;
-  const round = "flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card/80 text-base transition hover:bg-secondary";
   return (
     <div className="animate-screen-in relative isolate flex min-h-screen flex-col items-center gap-8 overflow-hidden p-6 pt-20 lg:grid lg:grid-cols-[minmax(260px,1fr)_auto_minmax(300px,1fr)] lg:items-center lg:gap-10 lg:px-12">
       <LiveBackdrop />
       <div className="absolute right-4 top-4 flex items-center gap-2">
-        <button aria-label="Звуковые эффекты" title="Звуковые эффекты" onClick={() => setProgress((x) => ({ ...x, muted: !x.muted }))} className={cn(round, p.muted && "opacity-50")}>{p.muted ? "🔇" : "🔊"}</button>
-        <button aria-label="Музыка" title="Музыка" onClick={() => setProgress((x) => ({ ...x, musicMuted: !x.musicMuted }))} className={cn(round, p.musicMuted && "opacity-50")}>{p.musicMuted ? "🔕" : "🎵"}</button>
-        <button aria-label="Показать обучение снова" title="Показать обучение снова" onClick={() => setProgress((x) => resetTutorials(x))} className={round}>❔</button>
         <Wallet />
       </div>
 
@@ -54,6 +52,7 @@ function Menu() {
         <div className="relative text-center">
           <h1 className="font-display text-6xl tracking-[0.12em] text-primary drop-shadow-[0_4px_20px_var(--blood)] sm:text-8xl">SIEGE</h1>
           <p className="font-display text-base tracking-[0.45em] text-muted-foreground">MARCH OF DOOM</p>
+          {(p.ach?.title || hasJoke(p, "plaster") || hasJoke(p, "flag")) && <p className="mt-2 text-sm text-gold">{hasJoke(p, "flag") && <span className="mr-1 inline-block animate-bump" title="Пацифист">🏳️</span>}Владыка Мортрекс{hasJoke(p, "plaster") && <span className="ml-1" title="Мазохист">🩹</span>}{p.ach?.title && <span className="text-muted-foreground"> · «{p.ach.title}»</span>}</p>}
         </div>
         <Link to="/campaign" className={cn(gameButton({ variant: "primary", size: "lg" }), "h-auto w-full max-w-md flex-col gap-0 py-3")}>
           <span className="font-display text-2xl tracking-widest">В БОЙ</span>
@@ -64,6 +63,8 @@ function Menu() {
           <Link to="/talents" className={cn(gameButton({ size: "md" }), "relative")}>Таланты{stars > 0 && <Badge tone="gold">★{stars}</Badge>}</Link>
           <Link to="/shop" className={gameButton({ variant: "gold", size: "md" })}>Кейсы</Link>
           <Link to="/chronicle" className={gameButton({ size: "md" })}>Летопись</Link>
+          <Link to="/settings" className={cn(gameButton({ size: "md" }), "col-span-2 sm:col-span-4")}>⚙ Настройки</Link>
+          <Link to="/achievements" className={cn(gameButton({ size: "md" }), "col-span-2 sm:col-span-4")}>🏆 Деяния · {ACHIEVEMENTS.filter((d) => hasAch(p, d.id)).length}/{ACHIEVEMENTS.length}</Link>
         </div>
         <p className="text-center text-xs text-muted-foreground">Пройдено уровней: {cleared}/{LEVELS.length}</p>
       </div>
@@ -90,7 +91,7 @@ function Rewards() {
           const got = i < streak - (avail ? 1 : 0); const cur = avail && i === streak - 1;
           return (
             <div key={i} className={cn("flex flex-col items-center rounded border p-1 text-[9px] leading-tight", got ? "border-gold/50 bg-gold/15 text-gold" : cur ? "animate-soft-pulse border-gold bg-secondary" : "border-border bg-muted text-muted-foreground")}>
-              <span className="font-display">{i + 1}</span><span>🪙{d.gold}</span>{d.skulls > 0 && <span>💀{d.skulls}</span>}
+              <span className="font-display">{i + 1}</span><span className="inline-flex items-center gap-0.5"><CurrencyIcon kind="gold" className="text-gold" />{d.gold}</span>{d.skulls > 0 && <span className="inline-flex items-center gap-0.5"><CurrencyIcon kind="skulls" className="text-skull" />{d.skulls}</span>}
             </div>
           );
         })}
@@ -128,7 +129,7 @@ function HordeHQ() {
   const tone = avg >= rec ? "text-poison" : avg >= rec * 0.85 ? "text-gold" : "text-blood";
   return (
     <Panel title="Штаб Орды" className="relative order-2 flex w-full max-w-md flex-col justify-self-end lg:order-none">
-      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+      <div className="grid min-w-0 gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(max(76px, calc((100% - ${(cols - 1) * 0.5}rem) / ${cols})), 1fr))` }}>
         {Array.from({ length: cols }, (_, i) => {
           const id = p.squad[i];
           if (!id) return i < limit
@@ -136,8 +137,8 @@ function HordeHQ() {
             : <div key={i} className="flex min-h-36 items-center justify-center rounded-lg border border-border/40 text-muted-foreground/40">🔒</div>;
           const lvl = p.owned[id]?.lvl ?? 1; const rc = `var(--rarity-${MONSTERS[id].rarity})`;
           return (
-            <Link key={id} to="/squad" className="group flex flex-col items-center gap-1 rounded-lg border border-border bg-secondary/50 px-1 pb-2 pt-1 transition hover:-translate-y-0.5 hover:border-primary">
-              <div className="relative flex w-full justify-center rounded-md" style={{ background: `radial-gradient(circle at 50% 60%, color-mix(in oklab, ${rc} 35%, transparent), transparent 70%)` }}>
+            <Link key={id} to="/squad" className="group flex min-w-0 flex-col items-center gap-1 overflow-hidden rounded-lg border border-border bg-secondary/50 px-1 pb-2 pt-1 transition hover:-translate-y-0.5 hover:border-primary">
+              <div className={cn("relative flex aspect-square w-full max-w-[76px] items-center justify-center overflow-hidden rounded-md border-2 border-transparent [&_canvas]:h-full! [&_canvas]:w-full! [&>*]:max-w-full", p.ach?.frame && FRAMES[p.ach.frame].cls)} style={{ background: `radial-gradient(circle at 50% 60%, color-mix(in oklab, ${rc} 35%, transparent), transparent 70%)` }}>
                 <MonsterPortrait id={id} size={72} lvl={lvl} animate />
               </div>
               <span className="line-clamp-2 min-h-[2.2em] w-full text-center text-[11px] font-semibold leading-tight">{MONSTERS[id].name}</span>

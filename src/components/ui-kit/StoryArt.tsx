@@ -40,10 +40,21 @@ export function Bust({ kind, className }: { kind: BustKind; className?: string }
         <path d="M72 160 Q100 176 128 160" stroke="var(--gold)" strokeWidth="4" fill="none" />
       </>}
       {kind === "hood" && <>
-        <path d="M40 170 Q30 60 100 36 Q170 60 160 170 Q130 138 100 138 Q70 138 40 170Z" fill="currentColor" />
-        <path d="M58 156 Q56 82 100 64 Q144 82 142 156 Q122 128 100 128 Q78 128 58 156Z" fill="var(--background)" />
-        <circle cx="86" cy="104" r="4" fill="var(--gold)" className="animate-slow-glow" /><circle cx="114" cy="104" r="4" fill="var(--gold)" className="animate-slow-glow" />
-        <path d="M150 200 l26 -60 l6 3 l-22 62z" fill="var(--vellum)" /><path d="M176 140 l10 -14 l-4 18z" fill="var(--ink)" />
+        {/* robe with a belt of scrolls */}
+        <path d="M40 240 Q46 176 100 166 Q154 176 160 240Z" fill="var(--ink)" opacity="0.45" />
+        <path d="M100 168 V240" stroke="var(--ink)" strokeWidth="3" opacity="0.5" />
+        {/* deep hood: outer cloth, dark opening, no face — only eyes */}
+        <path d="M38 176 Q28 58 100 32 Q172 58 162 176 Q132 146 100 146 Q68 146 38 176Z" fill="currentColor" stroke="var(--ink)" strokeWidth="3" />
+        <path d="M100 34 Q86 90 92 146 M100 34 Q114 90 108 146" stroke="var(--ink)" strokeWidth="2" opacity="0.35" fill="none" />
+        <path d="M58 158 Q54 84 100 64 Q146 84 142 158 Q122 134 100 134 Q78 134 58 158Z" fill="var(--background)" />
+        <circle cx="86" cy="104" r="5" fill="var(--gold)" className="animate-slow-glow" /><circle cx="114" cy="104" r="5" fill="var(--gold)" className="animate-slow-glow" />
+        {/* hand with quill and an open book */}
+        <path d="M54 214 L100 200 L146 214 L146 240 L54 240Z" fill="var(--vellum)" stroke="var(--ink)" strokeWidth="2" />
+        <path d="M100 200 V240" stroke="var(--ink)" strokeWidth="2" />
+        <path d="M64 218 h28 M64 226 h24 M108 218 h28 M108 226 h22" stroke="var(--ink)" strokeWidth="1.5" opacity="0.5" />
+        <ellipse cx="140" cy="206" rx="12" ry="9" fill="var(--muted-foreground)" stroke="var(--ink)" strokeWidth="2" />
+        <path d="M140 204 L176 140 L182 144 L146 206Z" fill="var(--vellum)" stroke="var(--ink)" strokeWidth="1.5" />
+        <path d="M176 140 L188 124 L182 146Z" fill="var(--ink)" />
       </>}
       {kind === "chancellor" && <>
         <path d="M40 240 Q46 170 100 160 Q154 170 160 240Z" fill="var(--muted-foreground)" opacity="0.6" />
@@ -56,12 +67,34 @@ export function Bust({ kind, className }: { kind: BustKind; className?: string }
         <g transform="translate(140 196)"><circle r="12" fill="var(--gold)" /><path d="M-6 6 L-2 -10 M0 6 L2 -12 M6 6 L6 -10" stroke="var(--ink)" strokeWidth="2" /></g>
       </>}
       {kind === "veil" && <>
-        <path d="M44 200 Q34 56 100 40 Q166 56 156 200 Q130 160 100 160 Q70 160 44 200Z" fill="currentColor" opacity="0.95" />
-        <ellipse cx="100" cy="108" rx="30" ry="38" fill={`url(#${id}f)`} />
-        <path d="M70 116 Q100 132 130 116 L126 150 Q100 162 74 150Z" fill="var(--background)" opacity="0.85" />
-        <path d="M82 102 q6 -6 12 0 M106 102 q6 -6 12 0" stroke="var(--blood)" strokeWidth="4" fill="none" className="animate-slow-glow" />
-        <circle cx="100" cy="64" r="5" fill="var(--blood)" />
-        <path d="M150 150 q8 -14 0 -26 q-4 10 -10 6 q4 10 10 20z" fill="var(--gold)" className="animate-candle" />
+        {/* Kaira: priestess in a hooded mantle, lower face hidden by a veil, holding a ritual candle */}
+        {/* mantle over shoulders with folds and a clasp */}
+        <path d="M8 240 Q16 170 100 156 Q184 170 192 240Z" fill="currentColor" stroke="var(--ink)" strokeWidth="3" />
+        <path d="M52 240 Q58 200 72 176 M148 240 Q142 200 128 176 M100 186 V240" stroke="var(--ink)" strokeWidth="2.5" opacity="0.35" fill="none" />
+        <path d="M70 172 Q100 196 130 172" stroke="var(--gold)" strokeWidth="4" fill="none" />
+        <circle cx="100" cy="186" r="7" fill="var(--gold)" stroke="var(--ink)" strokeWidth="2" /><circle cx="100" cy="186" r="3" fill="var(--blood)" />
+        {/* hood: outer cloth with a visible rim, dark inside */}
+        <path d="M46 176 Q36 54 100 36 Q164 54 154 176 Q140 150 100 148 Q60 150 46 176Z" fill="currentColor" stroke="var(--ink)" strokeWidth="3" />
+        <path d="M60 164 Q54 72 100 56 Q146 72 140 164 Q124 142 100 140 Q76 142 60 164Z" fill="var(--ink)" opacity="0.75" />
+        <path d="M60 164 Q54 72 100 56 Q146 72 140 164" stroke="var(--gold)" strokeWidth="2" fill="none" opacity="0.6" />
+        {/* face */}
+        <ellipse cx="100" cy="106" rx="27" ry="34" fill={`url(#${id}f)`} />
+        <path d="M80 94 q8 -5 15 -1 M105 93 q7 -4 15 1" stroke="var(--ink)" strokeWidth="3" fill="none" />
+        <path d="M82 102 q6 -4 12 0 M106 102 q6 -4 12 0" stroke="var(--blood)" strokeWidth="3.5" fill="none" className="animate-slow-glow" />
+        <path d="M100 104 v10" stroke="var(--ink)" strokeWidth="2" opacity="0.5" />
+        {/* circlet and forehead gem */}
+        <path d="M74 82 Q100 72 126 82" stroke="var(--gold)" strokeWidth="3" fill="none" />
+        <circle cx="100" cy="76" r="5" fill="var(--blood)" stroke="var(--gold)" strokeWidth="2" />
+        {/* veil over mouth and chin, hanging in folds */}
+        <path d="M72 114 Q100 124 128 114 L124 148 Q100 158 76 148Z" fill="var(--vellum)" opacity="0.85" stroke="var(--ink)" strokeWidth="2" />
+        <path d="M88 122 L86 150 M100 124 V154 M112 122 L114 150" stroke="var(--ink)" strokeWidth="1.5" opacity="0.35" />
+        {/* hand holding a candle */}
+        <path d="M144 196 h12 v-50 h-12z" fill="var(--vellum)" stroke="var(--ink)" strokeWidth="2" />
+        <path d="M144 150 q2 6 0 12" stroke="var(--ink)" strokeWidth="1.5" opacity="0.4" fill="none" />
+        <ellipse cx="150" cy="198" rx="16" ry="10" fill="var(--vellum)" stroke="var(--ink)" strokeWidth="2.5" />
+        <path d="M138 196 q12 -6 24 0" stroke="var(--ink)" strokeWidth="1.5" opacity="0.5" fill="none" />
+        <circle cx="150" cy="132" r="14" fill="var(--gold)" opacity="0.18" className="animate-slow-glow" />
+        <path d="M150 144 q9 -10 0 -24 q-9 14 0 24z" fill="var(--gold)" stroke="var(--blood)" strokeWidth="1.5" className="animate-candle" />
       </>}
       {kind === "witch" && <>
         <ellipse cx="100" cy="116" rx="32" ry="40" fill={`url(#${id}f)`} />

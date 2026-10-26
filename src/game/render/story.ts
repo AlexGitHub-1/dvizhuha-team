@@ -28,7 +28,7 @@ function deadTree(g: G, x: number, y: number, s: number, col: string) {
   g.strokeStyle = col; g.lineCap = "round"; g.lineWidth = 6 * s;
   g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4 * s, y - 120 * s); g.stroke();
   g.lineWidth = 3 * s;
-  for (const [a, b, c, d] of [[2, -70, -40, -110], [3, -90, 45, -130], [4, -110, -20, -160], [-20, -105, -50, -125]]) { g.beginPath(); g.moveTo(x + a! * s, y + b! * s); g.lineTo(x + c! * s, y + d! * s); g.stroke(); }
+  for (const [a, b, c, d] of [[2, -70, -40, -110], [3, -90, 45, -130], [4, -110, -20, -160], [3.5, -100, -42, -128]]) { g.beginPath(); g.moveTo(x + a! * s, y + b! * s); g.lineTo(x + c! * s, y + d! * s); g.stroke(); }
 }
 function pine(g: G, x: number, y: number, s: number, col: string) {
   g.fillStyle = col; g.beginPath(); g.moveTo(x, y - 150 * s);

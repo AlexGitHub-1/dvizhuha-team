@@ -1,6 +1,8 @@
 import { MercyBadge, PuzzleBadge } from "@/components/ui-kit/MercyBadge";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { ADAPT, createBattle, GATE, W, H } from "@/game/engine/battle";
+import { MAPS, type LevelDef } from "@/game/data/levels";
 import { Currency, GameButton, gameButton, Panel, ScreenShell } from "@/components/ui-kit";
 import { Wallet } from "@/components/ui-kit/MonsterCard";
 import { PoolCard, PoolZone, SquadDnd, SquadRow } from "@/components/ui-kit/SquadDnd";
@@ -12,7 +14,7 @@ import { TOWERS, type TowerKind } from "@/game/data/towers";
 import { COLLECTIBLE } from "@/game/data/monsters";
 import { SPELLS } from "@/game/data/shop";
 import { Cutscene } from "@/components/ui-kit/Cutscene";
-import { isLevelUnlocked, markScene, prologueFor, squadLimit, talentBonuses, toggleSquad, defenseMemory, lossStreak, mercyBonuses, mercyTier, requiredPower, squadPower } from "@/game/meta/progress";
+import { isLevelUnlocked, markScene, prologueFor, squadLimit, talentBonuses, toggleSquad, defenseMemory, lossStreak, mercyBonuses, mercyTier, requiredPower, squadPower, garrisonScout } from "@/game/meta/progress";
 import { SynergyList } from "@/components/ui-kit/SynergyList";
 import { getProgress, setProgress, useProgress } from "@/game/meta/store";
 
@@ -92,7 +94,16 @@ function Play() {
           </Panel>
         </div>
         <div className="flex h-fit flex-col gap-4 lg:sticky lg:top-20">
+          <Panel title="Разведка гарнизона">
+            <ul data-tut="scout" className="mb-3 space-y-1.5">
+              {garrisonScout(level, p.squad.filter((id) => p.owned[id])).map((l, i) => (
+                <li key={i} className={cn("flex gap-2 rounded-lg border px-2 py-1.5 text-xs leading-snug", l.tone === "warn" ? "border-blood/40 bg-blood/10" : l.tone === "good" ? "border-poison/40 bg-poison/10" : "border-border bg-background/40")}>
+                  <span className="shrink-0">{l.icon}</span><span>{l.text}</span>
+                </li>))}
+            </ul>
+          </Panel>
           <Panel title="Разведка">
+            <ReconMap level={level} />
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-lg border border-border bg-background/40 p-2"><div className="text-xl">🏰</div><div className="font-display text-sm">{level.gateHp}</div><div className="text-[10px] text-muted-foreground">ворота</div></div>
               <div className="rounded-lg border border-border bg-background/40 p-2"><div className="text-xl">⏳</div><div className="font-display text-sm">{Math.floor(level.timeLimit / 60)}:{String(level.timeLimit % 60).padStart(2, "0")}</div><div className="text-[10px] text-muted-foreground">время</div></div>
@@ -116,5 +127,32 @@ function Play() {
       </div>
     </ScreenShell>
     </SquadDnd>
+  );
+}
+
+const TOWER_DOT: Partial<Record<TowerKind, string>> = { archer: "var(--gold)", cannon: "var(--blood)", mage: "var(--ice)", frost: "var(--ice)", bell: "var(--gold)", censer: "var(--poison)", ballista: "var(--primary)", flame: "var(--blood)" };
+/** Defence scheme before the battle: road, tower posts, barricades and the ruin cover. */
+function ReconMap({ level }: { level: LevelDef }) {
+  const b = useMemo(() => createBattle(level, [], "march"), [level]);
+  const pts = MAPS[level.map]!.path.map(([x, y]) => `${x},${y}`).join(" ");
+  return (
+    <div className="mb-3">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-border bg-background/60">
+        <polyline points={pts} fill="none" stroke="var(--muted)" strokeWidth={46} strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={pts} fill="none" stroke="var(--border)" strokeWidth={4} strokeDasharray="14 14" />
+        {b.slots.map((s, i) => !b.towers.some((t) => t.slot === i) && <circle key={i} cx={s.x} cy={s.y} r={16} fill="none" stroke="var(--muted-foreground)" strokeWidth={3} strokeDasharray="6 6" />)}
+        {b.towers.map((t) => <g key={t.id}><circle cx={t.x} cy={t.y} r={t.elite ? 26 : 20} fill={TOWER_DOT[t.kind] ?? "var(--foreground)"} stroke="var(--background)" strokeWidth={5} />{t.elite && <text x={t.x} y={t.y - 32} textAnchor="middle" fontSize={34} fill="var(--gold)">★</text>}</g>)}
+        {b.obstacles.map((o, i) => o.kind === "barricade"
+          ? <rect key={i} x={o.x - 30} y={o.y - 10} width={60} height={20} rx={4} fill="var(--gold)" stroke="var(--background)" strokeWidth={4} transform={`rotate(${(o.ang * 180) / Math.PI + 90} ${o.x} ${o.y})`} />
+          : <circle key={i} cx={o.x} cy={o.y} r={40} fill="var(--ice)" opacity={0.35} />)}
+        <rect x={GATE.x - 40} y={GATE.y - 70} width={70} height={140} rx={8} fill="var(--blood)" opacity={0.85} />
+      </svg>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+        <span>● башни ({b.towers.length})</span><span>◌ пустые места</span>
+        {b.obstacles.some((o) => o.kind === "barricade") && <span className="text-gold">▬ баррикады — их надо разбить</span>}
+        {b.obstacles.some((o) => o.kind === "cover") && <span className="text-ice">◯ руины — укрытие от стрел</span>}
+      </div>
+      <div className="mt-1 text-[10px] text-muted-foreground">Гарнизон: метка наводчика каждые {ADAPT.mark.every} с, паника при воротах ниже {ADAPT.panicAt * 100}%, ярость в последние {ADAPT.furyLast} с. Осадные бойцы и бомберы срывают суперзаряд.</div>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 import { MONSTERS } from "../data/monsters";
 import { RARITY_INFO } from "../data/rarity";
 import { TOWERS, towerScale } from "../data/towers";
-import { H, W, type Battle, type Champion, type Corpse, type Tower, type Unit } from "../engine/battle";
+import { ADAPT, GATE, H, inCover, STANCE_NAME, W, type Battle, type Champion, type Corpse, type Tower, type Unit } from "../engine/battle";
 import { drawCreature, FLOATERS } from "./creatures";
 
 type G = CanvasRenderingContext2D;
@@ -189,8 +189,13 @@ function fence(g: G) {
 }
 
 /** Shared polish on tower bodies: side shading, stonework, lit windows, base rune circle. */
-function towerDetail(g: G, t: Tower, time: number, fl: boolean) {
-  if (fl) return;
+/** Lightens a #rrggbb colour toward warm white by k (hit flash keeps the texture). */
+function warm(c: string, k: number) {
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return c;
+  const n = parseInt(c.slice(1), 16); const m = (v: number, w: number) => Math.round(v + (w - v) * k);
+  return `rgb(${m(n >> 16, 255)},${m((n >> 8) & 255, 226)},${m(n & 255, 180)})`;
+}
+function towerDetail(g: G, t: Tower, time: number, _fl: boolean) {
   const box: Partial<Record<Tower["kind"], [number, number, number, number]>> = { archer: [-14, -36, 28, 38], cannon: [-22, -28, 44, 30], frost: [-12, -30, 24, 32], flame: [-14, -34, 28, 36], ballista: [-18, -20, 36, 22], mage: [-10, -44, 20, 46] };
   const r = box[t.kind];
   if (r) {
@@ -229,7 +234,8 @@ function drawTower(g: G, t: Tower, time: number) {
   if (t.growT > 0) { const s = 1 + Math.sin((t.growT / 0.6) * Math.PI) * 0.12; g.scale(1 / s, s); }
   const fl = t.flash > 0;
   const base = BODY[t.kind]!;
-  const stone = (c: string) => (fl ? "#fff" : t.frozenT > 0 ? "#a8d8f0" : c);
+  if (fl) g.translate((Math.random() - 0.5) * 2.4, 0);
+  const stone = (c: string) => (t.frozenT > 0 ? "#a8d8f0" : fl ? warm(c, 0.3) : c);
   if (t.kind === "archer") {
     g.fillStyle = stone(base); g.fillRect(-14, -36, 28, 38); g.fillStyle = "#4a3c2c"; for (let i = 0; i < 4; i++) g.fillRect(-16 + i * 9, -44, 6, 8);
     g.fillStyle = "#111"; g.fillRect(-3, -26, 6, 10);
@@ -254,6 +260,7 @@ function drawTower(g: G, t: Tower, time: number) {
     g.fillStyle = stone(base); g.beginPath(); g.moveTo(-16, 2); g.lineTo(-12, -34); g.lineTo(12, -34); g.lineTo(16, 2); g.fill(); g.fillStyle = "#2a1e1a"; g.fillRect(-14, -38, 28, 5);
   }
   towerDetail(g, t, time, fl);
+  if (fl) { const hg = g.createRadialGradient(0, -22, 2, 0, -22, 30); hg.addColorStop(0, "rgba(255,200,130,0.28)"); hg.addColorStop(1, "rgba(255,170,90,0)"); g.save(); g.globalCompositeOperation = "lighter"; g.fillStyle = hg; g.beginPath(); g.arc(0, -22, 30, 0, Math.PI * 2); g.fill(); g.restore(); }
   // stacked floors: lvl2 second floor, lvl4 third floor
   const baseTop = t.kind === "ballista" ? -24 : t.kind === "cannon" ? -32 : t.kind === "flame" ? -38 : t.kind === "bell" ? -54 : t.kind === "frost" ? -31 : t.kind === "censer" ? -29 : -44;
   let top = baseTop;
@@ -651,12 +658,15 @@ function drawCorpse(g: G, c: Corpse) {
 export interface Aim { x: number; y: number; kind: "tower" | "area" }
 /** Tower under the pointer (world coords), used to highlight its attack radius. */
 export function towerAt(b: Battle, x: number, y: number) { return b.towers.find((t) => t.alive && !t.building && Math.hypot(t.x - x, t.y - 10 - y) < 30) ?? null; }
-export function renderBattle(g: G, b: Battle, aim: Aim | null = null, hover: { x: number; y: number } | null = null) {
+/** Visual comfort options set from player settings. */
+export const RENDER = { shake: 1, particles: 1, numbers: true, marks: true, ambient: true, ranges: true };
+
+export function renderBattle(g: G, b: Battle, aim: Aim | null = null, hover: { x: number; y: number } | null = null, danger = false) {
   const bg = buildBg(b);
   g.save();
-  if (b.shake > 0) g.translate((Math.random() - 0.5) * b.shake * 2, (Math.random() - 0.5) * b.shake * 2);
+  if (b.shake > 0 && RENDER.shake > 0) { const k = b.shake * 2 * RENDER.shake; g.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k); }
   g.drawImage(bg, -BX, -BY);
-  for (const t of b.towers) if (t.alive && !t.building) { g.strokeStyle = "rgba(255,80,60,0.07)"; g.beginPath(); g.arc(t.x, t.y, TOWERS[t.kind].range * towerScale(t.lvl).range, 0, Math.PI * 2); g.stroke(); }
+  if (RENDER.ranges) for (const t of b.towers) if (t.alive && !t.building) { g.fillStyle = "rgba(255,70,50,0.05)"; g.strokeStyle = "rgba(255,90,60,0.32)"; g.lineWidth = 1.5; g.beginPath(); g.arc(t.x, t.y, TOWERS[t.kind].range * towerScale(t.lvl).range, 0, Math.PI * 2); g.fill(); g.stroke(); }
   const ht = hover && !aim ? towerAt(b, hover.x, hover.y) : null;
   if (ht) {
     const r = TOWERS[ht.kind].range * towerScale(ht.lvl).range;
@@ -664,6 +674,9 @@ export function renderBattle(g: G, b: Battle, aim: Aim | null = null, hover: { x
     g.beginPath(); g.arc(ht.x, ht.y, r, 0, Math.PI * 2); g.fill(); g.stroke(); g.setLineDash([]);
   }
   drawDecals(g, b);
+  drawObstacles(g, b);
+  drawTars(g, b);
+  if (danger) drawDanger(g, b);
   drawGate(g, b, b.time);
   const ents: { y: number; draw: () => void }[] = [];
   for (const t of b.towers) ents.push({ y: t.y, draw: () => drawTower(g, t, b.time) });
@@ -671,6 +684,7 @@ export function renderBattle(g: G, b: Battle, aim: Aim | null = null, hover: { x
   for (const c of b.champs) ents.push({ y: c.y, draw: () => drawChampion(g, c, b.time) });
   for (const c of b.corpses) ents.push({ y: c.y, draw: () => drawCorpse(g, c) });
   ents.sort((a, c) => a.y - c.y).forEach((e) => e.draw());
+  drawGarrisonFx(g, b);
   for (const p of b.projs) {
     if (p.kind === "arrow") { const a = Math.atan2(p.ty - p.y, p.tx - p.x); g.strokeStyle = p.lvl >= 3 ? "#ff9a3a" : "#e8d8b0"; g.lineWidth = 2; g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - Math.cos(a) * 12, p.y - Math.sin(a) * 12); g.stroke(); }
     else if (p.kind === "rock") { const fg = g.createRadialGradient(p.x, p.y, 1, p.x, p.y, 12); fg.addColorStop(0, "rgba(255,220,120,0.9)"); fg.addColorStop(1, "rgba(255,90,20,0)"); g.fillStyle = fg; g.beginPath(); g.arc(p.x, p.y, 12, 0, Math.PI * 2); g.fill(); g.fillStyle = "#3a2a1a"; g.beginPath(); g.arc(p.x, p.y, 5, 0, Math.PI * 2); g.fill(); }
@@ -689,14 +703,16 @@ export function renderBattle(g: G, b: Battle, aim: Aim | null = null, hover: { x
     g.save(); g.strokeStyle = "rgba(255,70,50,0.28)"; g.lineWidth = 1.2; g.setLineDash([6, 8]); g.lineDashOffset = -b.time * 50; g.beginPath(); g.moveTo(t.x, sy); g.lineTo(u.x, u.y - 8); g.stroke(); g.restore();
   }
   g.globalCompositeOperation = "lighter";
-  for (const p of b.parts) { g.globalAlpha = Math.max(0, p.life / p.max); g.fillStyle = p.color; g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size); }
+  const pstep = RENDER.particles < 1 ? Math.round(1 / RENDER.particles) : 1;
+  for (let pi = 0; pi < b.parts.length; pi += pstep) { const p = b.parts[pi]!; g.globalAlpha = Math.max(0, p.life / p.max); g.fillStyle = p.color; g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size); }
   g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
-  ambient(g, b.theme, b.time);
+  if (RENDER.ambient) ambient(g, b.theme, b.time);
   g.textAlign = "center"; g.font = "15px 'Russo One', sans-serif";
   for (const t of b.texts) { g.globalAlpha = Math.min(1, t.life); g.fillStyle = "#000"; g.fillText(t.text, t.x + 1, t.y + 1); g.fillStyle = t.color; g.fillText(t.text, t.x, t.y); }
   g.globalAlpha = 1;
-  drawTargetTags(g, b);
-  drawNums(g, b);
+  if (RENDER.marks) { drawTargetTags(g, b); drawMark(g, b); }
+  drawStance(g, b);
+  if (RENDER.numbers) drawNums(g, b);
   drawSuperWarn(g, b);
   drawSplinters(g, b);
   drawOrbs(g, b);
@@ -796,6 +812,108 @@ function drawOrbs(g: G, b: Battle) {
     g.fillStyle = gr; g.beginPath(); g.arc(x, y, r * 2.2, 0, Math.PI * 2); g.fill();
     for (let i = 1; i <= 4; i++) { const ke = Math.max(0, e - i * 0.04); const px = (1 - ke) * (1 - ke) * o.x + 2 * (1 - ke) * ke * mx + ke * ke * tx, py = (1 - ke) * (1 - ke) * o.y + 2 * (1 - ke) * ke * my + ke * ke * ty; g.fillStyle = `rgba(170,110,255,${0.4 - i * 0.08})`; g.beginPath(); g.arc(px, py, r * (1 - i * 0.15), 0, Math.PI * 2); g.fill(); }
     if (k < 0.45) { g.globalCompositeOperation = "source-over"; g.font = "bold 18px 'Russo One', sans-serif"; g.textAlign = "center"; g.fillStyle = "#000"; g.fillText(`+${o.v}`, o.x + 1, o.y - 30 - k * 60 + 1); g.fillStyle = "#d8b0ff"; g.fillText(`+${o.v}`, o.x, o.y - 30 - k * 60); g.globalCompositeOperation = "lighter"; }
+  }
+  g.restore();
+}
+
+/** Road barricades (sharpened logs across the road) and a ruined wall that shields monsters from arrows. */
+function drawObstacles(g: G, b: Battle) {
+  for (const o of b.obstacles) {
+    g.save(); g.translate(o.x, o.y);
+    if (o.kind === "cover") {
+      g.fillStyle = "rgba(0,0,0,0.25)"; g.beginPath(); g.ellipse(0, 10, 46, 12, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "rgba(140,200,255,0.18)"; g.setLineDash([4, 6]); g.beginPath(); g.arc(0, 0, ADAPT.cover.radius, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      const blocks: [number, number, number, number][] = [[-38, -8, 22, 18], [-16, -22, 20, 32], [4, -14, 18, 24], [22, -4, 16, 14], [-26, -26, 12, 10]];
+      for (const [x, y, w, h] of blocks) { g.fillStyle = "#6f6a62"; g.fillRect(x, y, w, h); g.fillStyle = "#8d877c"; g.fillRect(x, y, w, 4); g.strokeStyle = "#3e3a35"; g.lineWidth = 1; g.strokeRect(x, y, w, h); }
+      g.fillStyle = "#4f6b3a"; g.beginPath(); g.ellipse(-20, 10, 12, 4, 0, 0, Math.PI * 2); g.ellipse(18, 10, 9, 3, 0, 0, Math.PI * 2); g.fill();
+      g.font = "10px 'Russo One', sans-serif"; g.textAlign = "center"; g.fillStyle = "rgba(190,225,255,0.8)"; g.fillText("🛡 укрытие", 0, -34);
+    } else if (o.hp > 0) {
+      g.rotate(o.ang + Math.PI / 2); const shake = o.hitT > 0 ? (Math.random() - 0.5) * 3 : 0; g.translate(shake, 0);
+      g.fillStyle = "rgba(0,0,0,0.3)"; g.beginPath(); g.ellipse(0, 6, 40, 9, 0, 0, Math.PI * 2); g.fill();
+      for (let i = -3; i <= 3; i++) {
+        const x = i * 11; g.save(); g.translate(x, 0); g.rotate(i % 2 ? 0.35 : -0.35);
+        g.fillStyle = o.hitT > 0 ? "#c09060" : "#7a5430"; g.fillRect(-3.5, -20, 7, 30);
+        g.fillStyle = "#d8c49a"; g.beginPath(); g.moveTo(-3.5, -20); g.lineTo(0, -28); g.lineTo(3.5, -20); g.fill(); g.restore();
+      }
+      g.fillStyle = "#5a3c20"; g.fillRect(-38, -4, 76, 6); g.strokeStyle = "#2a1a0e"; g.lineWidth = 1.5; g.strokeRect(-38, -4, 76, 6);
+      g.rotate(-(o.ang + Math.PI / 2));
+      const k = o.hp / o.maxHp; g.fillStyle = "rgba(0,0,0,0.6)"; g.fillRect(-24, -44, 48, 6); g.fillStyle = "#e8a040"; g.fillRect(-23, -43, 46 * k, 4);
+    } else {
+      g.rotate(o.ang + Math.PI / 2); g.fillStyle = "rgba(70,45,25,0.7)";
+      for (let i = -3; i <= 3; i++) { g.save(); g.translate(i * 12, 4 + (i % 2) * 4); g.rotate(1.2 + i * 0.4); g.fillRect(-3, -8, 6, 16); g.restore(); }
+    }
+    g.restore();
+  }
+}
+/** Spotter mark: rotating red crosshair over the unit the garrison focuses. */
+function drawMark(g: G, b: Battle) {
+  const u = b.mark.u; if (!u || u.dead || b.mark.t <= 0) return;
+  const r = MONSTERS[u.kind].radius + 14 + Math.sin(b.time * 6) * 2; const y = u.y - (FLOATERS.has(u.kind) ? 30 : 0);
+  g.save(); g.translate(u.x, y); g.rotate(b.time * 1.5); g.strokeStyle = `rgba(255,60,40,${0.5 + 0.4 * Math.min(1, b.mark.t)})`; g.lineWidth = 2.5;
+  for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(0, 0, r, i * Math.PI / 2 + 0.25, i * Math.PI / 2 + 1.3); g.stroke(); g.beginPath(); g.moveTo(r - 5, 0); g.lineTo(r + 7, 0); g.stroke(); g.rotate(Math.PI / 2); }
+  g.restore();
+}
+/** Garrison stance plaque above the gate. */
+function drawStance(g: G, b: Battle) {
+  const st = b.stance; const x = GATE.x - 60, y = GATE.y - 250; const label = `Гарнизон: ${STANCE_NAME[st]}`;
+  g.save(); g.font = "11px 'Russo One', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+  const w = g.measureText(label).width + 22; const hot = st !== "steady"; const pulse = hot ? 0.6 + Math.sin(b.time * 7) * 0.4 : 1;
+  g.fillStyle = st === "panic" ? "rgba(30,60,90,0.9)" : st === "fury" ? "rgba(120,20,15,0.92)" : "rgba(30,24,20,0.82)";
+  g.beginPath(); g.roundRect(x - w / 2, y - 10, w, 20, 6); g.fill();
+  g.strokeStyle = st === "panic" ? `rgba(160,220,255,${pulse})` : st === "fury" ? `rgba(255,120,80,${pulse})` : "rgba(200,170,110,0.6)"; g.lineWidth = 1.4; g.stroke();
+  g.fillStyle = "#f2e6d0"; g.fillText(label, x, y + 0.5); g.restore();
+}
+
+/** Tar puddles on the road; burning ones glow and flicker. */
+function drawTars(g: G, b: Battle) {
+  for (const tr of b.tars) {
+    const a = Math.min(1, tr.t); const r = ADAPT.tar.radius;
+    g.save(); g.globalAlpha = 0.85 * a; g.translate(tr.x, tr.y); g.scale(1, 0.55);
+    const tg = g.createRadialGradient(0, 0, 4, 0, 0, r); tg.addColorStop(0, "#120c06"); tg.addColorStop(0.75, "#2a1d10"); tg.addColorStop(1, "rgba(42,29,16,0)");
+    g.fillStyle = tg; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "rgba(255,240,200,0.12)"; g.beginPath(); g.ellipse(-r * 0.3, -r * 0.25, r * 0.25, r * 0.1, -0.3, 0, Math.PI * 2); g.fill();
+    if (tr.fire > 0) { const f = 0.55 + Math.sin(b.time * 18) * 0.15; const fg = g.createRadialGradient(0, 0, 4, 0, 0, r * 1.1); fg.addColorStop(0, `rgba(255,200,80,${f})`); fg.addColorStop(1, "rgba(255,80,20,0)"); g.globalCompositeOperation = "lighter"; g.fillStyle = fg; g.beginPath(); g.arc(0, 0, r * 1.1, 0, Math.PI * 2); g.fill(); }
+    g.restore();
+  }
+}
+/** Summon button held: towers that cover the entry or the current front line glow red. */
+function drawDanger(g: G, b: Battle) {
+  const front = b.units.reduce((m, u) => (!u.dead && !MONSTERS[u.kind].flying ? Math.max(m, u.d) : m), 0);
+  const pts: [number, number][] = []; for (let d = 0; d <= Math.max(b.path.len * 0.3, front + 60); d += 24) { const [x, y] = b.path.posAt(Math.min(d, b.path.len)); pts.push([x, y]); }
+  g.save();
+  for (const t of b.towers) {
+    if (!t.alive || t.building || t.kind === "bell") continue; const r = TOWERS[t.kind].range * towerScale(t.lvl).range;
+    if (!pts.some(([x, y]) => Math.hypot(x - t.x, y - t.y) < r)) continue;
+    const pulse = 0.5 + Math.sin(b.time * 6) * 0.2;
+    g.fillStyle = `rgba(255,50,40,${0.1 * pulse + 0.06})`; g.strokeStyle = `rgba(255,90,70,${pulse})`; g.lineWidth = 2.5; g.setLineDash([10, 6]); g.lineDashOffset = -b.time * 30;
+    g.beginPath(); g.arc(t.x, t.y, r, 0, Math.PI * 2); g.fill(); g.stroke();
+  }
+  g.setLineDash([]); g.restore();
+}
+/** Aegis bubbles, the stone-drop shadow, "in cover" shields and breakthrough-wave trails. */
+function drawGarrisonFx(g: G, b: Battle) {
+  g.save();
+  for (const t of b.towers) if (t.alive && t.aegis > 0) {
+    const r = 34 + Math.sin(b.time * 4 + t.id) * 2; const ag = g.createRadialGradient(t.x, t.y - 30, r * 0.5, t.x, t.y - 30, r);
+    ag.addColorStop(0, "rgba(160,215,255,0)"); ag.addColorStop(0.85, "rgba(160,215,255,0.22)"); ag.addColorStop(1, "rgba(200,235,255,0.7)");
+    g.fillStyle = ag; g.beginPath(); g.arc(t.x, t.y - 30, r, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = "rgba(200,235,255,0.6)"; g.lineWidth = 1.2; g.beginPath(); g.arc(t.x, t.y - 30, r, b.time * 2, b.time * 2 + 1.4); g.stroke();
+  }
+  if (b.stone) {
+    const k = 1 - Math.max(0, b.stone.t) / ADAPT.stones.warn; const r = ADAPT.stones.radius;
+    g.fillStyle = `rgba(0,0,0,${0.15 + 0.35 * k})`; g.beginPath(); g.ellipse(b.stone.x, b.stone.y, r * (0.4 + 0.6 * k), r * 0.45 * (0.4 + 0.6 * k), 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = `rgba(255,120,80,${0.4 + 0.5 * k})`; g.lineWidth = 2; g.beginPath(); g.ellipse(b.stone.x, b.stone.y, r, r * 0.45, 0, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = "#6b5a44"; g.beginPath(); g.arc(b.stone.x, b.stone.y - 220 * (1 - k) - 10, 9, 0, Math.PI * 2); g.fill();
+  }
+  for (const u of b.units) {
+    if (u.dead) continue; const hy = u.y - u.radius - (FLOATERS.has(u.kind) ? 58 : 30);
+    if (inCover(b, u)) {
+      const x = u.x + u.radius + 4, y = hy + 6;
+      g.fillStyle = "rgba(120,190,255,0.9)"; g.strokeStyle = "rgba(10,20,30,0.9)"; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 5, y - 4); g.lineTo(x + 4.5, y + 2); g.lineTo(x, y + 6); g.lineTo(x - 4.5, y + 2); g.lineTo(x - 5, y - 4); g.closePath(); g.fill(); g.stroke();
+    }
+    if (u.rushT > 0 && Math.random() < 0.5) { g.fillStyle = "rgba(255,207,90,0.5)"; g.fillRect(u.x - u.radius - 8 - Math.random() * 10, u.y - 6 + (Math.random() - 0.5) * 10, 8, 2); }
+    if (u.nolsT > 0 && MONSTERS[u.kind].lifesteal) { g.strokeStyle = "rgba(255,90,70,0.8)"; g.lineWidth = 2; g.beginPath(); g.moveTo(u.x - 6, hy - 6); g.lineTo(u.x + 6, hy + 6); g.moveTo(u.x + 6, hy - 6); g.lineTo(u.x - 6, hy + 6); g.stroke(); }
   }
   g.restore();
 }

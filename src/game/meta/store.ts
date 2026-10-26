@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { defaultProgress, migrateStarters, type Progress } from "./progress";
+import { unlockAchievements } from "./achievements";
+import type { AchDef } from "../data/achievements";
 import { setMusicMuted, setMuted } from "../audio";
 
 const KEY = "siege-progress-v1";
@@ -25,6 +27,8 @@ export function loadProgress() {
 
 export function setProgress(next: Progress | ((p: Progress) => Progress)) {
   state = typeof next === "function" ? next(state) : next;
+  const u = unlockAchievements(state); state = u.p;
+  if (u.fresh.length) achSubs.forEach((f) => f(u.fresh));
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* ignore */ }
   setMuted(state.muted); setMusicMuted(state.musicMuted);
   subs.forEach((f) => f());
@@ -38,3 +42,7 @@ export function useProgress() {
     () => SERVER,
   );
 }
+
+const achSubs = new Set<(a: AchDef[]) => void>();
+/** Listen for newly unlocked achievements (toast). */
+export function onAchievements(f: (a: AchDef[]) => void) { achSubs.add(f); return () => { achSubs.delete(f); }; }

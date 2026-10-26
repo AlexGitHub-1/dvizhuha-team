@@ -10,7 +10,7 @@ import { isLevelUnlocked, markScene, pendingEpilogue, requiredPower, squadPower 
 import { setProgress, useProgress } from "@/game/meta/store";
 import { Cutscene } from "@/components/ui-kit/Cutscene";
 import { hitNode, NODES, renderWorld, WORLD_H, WORLD_W, type MapState } from "@/game/render/worldmap";
-import { sfx, startScene, stopScene, unlockAudio } from "@/game/audio";
+import { sfx } from "@/game/audio";
 
 export const Route = createFileRoute("/campaign")({
   head: () => ({
@@ -60,9 +60,6 @@ function Campaign() {
       setTimeout(() => centerOn(n.x, n.y, z), 250);
     }
     st.current.banner = Math.max(-1, furthest - 1);
-    const startAudio = () => { unlockAudio(); startScene("map", false); };
-    startAudio(); window.addEventListener("pointerdown", startAudio, { once: true });
-    return () => { stopScene(); window.removeEventListener("pointerdown", startAudio); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

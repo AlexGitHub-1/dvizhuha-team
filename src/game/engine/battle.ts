@@ -18,16 +18,22 @@ export const GATE_MUL = 2;
 export interface Unit {
   id: number; kind: MonsterId; lvl: number; d: number; x: number; y: number; hp: number; maxHp: number; armor: number;
   speed: number; dps: number; reach: number; radius: number; abil: number; slowT: number; stealthT: number; recloakT: number;
-  revived: boolean; reborn: boolean; atGate: boolean; bob: number; atkT: number; buffed: boolean; shield: number; hurtT: number;
+  revived: boolean; reborn: boolean; atGate: boolean; bob: number; atkT: number; buffed: boolean; buffHeal: number; shield: number; hurtT: number;
   burnT: number; burnDps: number; poisonT: number; poisonDps: number; minion: boolean; dead: boolean; lane: number; attacking: boolean; stunT: number; spawnT: number;
   legion: boolean; knock: number; fireT: number;
+  /** Breakthrough wave speed bonus, tar slow, crossfire blocks lifesteal; engaged = ever hit a tower/gate */
+  rushT: number; tarT: number; nolsT: number; engaged: boolean; born: number; poisonBy: Tower | null; burnBy: Tower | null; crossT: number;
 }
 export interface Tower {
   id: number; kind: TowerKind; slot: number; lvl: number; x: number; y: number; hp: number; maxHp: number; mul: number;
   cd: number; angle: number; alive: boolean; ruinT: number; flash: number; frozenT: number; blindT: number;
   aim: Unit | null; upgradeT: number; building: boolean; disabled: boolean; charge: number; superT: number; growT: number; shots: number; elite: boolean;
+  /** retaliation: fires faster for a while after siege/bomb hits */
+  rageT: number;
+  /** Aegis Link shield charge (absorbs one heavy hit); cooldown for mage towers casting it; damage dealt to the horde */
+  aegis: number; aegisCd: number; dealt: number;
 }
-export interface Proj { kind: "arrow" | "ball" | "mini" | "rock"; x: number; y: number; sx: number; sy: number; tx: number; ty: number; t: number; dur: number; target: Unit | null; dmg: number; splash: number; lvl: number; by?: MonsterId }
+export interface Proj { kind: "arrow" | "ball" | "mini" | "rock"; x: number; y: number; sx: number; sy: number; tx: number; ty: number; t: number; dur: number; target: Unit | null; dmg: number; splash: number; lvl: number; by?: MonsterId; from?: Tower }
 export interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; grav: number }
 export interface Beam { x1: number; y1: number; x2: number; y2: number; life: number; color: string; jag: boolean }
 export interface DmgNum { x: number; y: number; v: number; kind: "hit" | "big" | "heal" | "gate"; life: number; max: number; vx: number }
@@ -54,12 +60,33 @@ export interface Battle {
   fistHits: number; gateBeat: number; legionMinion: boolean; hitStop: number; splinters: Splinter[];
   /** defence AI: adapted counter-modes and what it has seen so far */
   ai: DefenseAI;
+  /** garrison command: spotter mark, stance, player's grouped wave, road obstacles */
+  mark: { u: Unit | null; t: number; cd: number }; stance: Stance;
+  /** emergency gate ward (from region IV): fires once when the gate drops low */
+  /** tar traps, gate stone drop, breakthrough timing, final slow-mo, defeat breakdown counters */
+  tars: Tar[]; tarCd: number; stone: { x: number; y: number; t: number } | null; stoneCd: number; lastTankT: number; slowMo: number; slowMoDone: boolean;
+  wasted: number; longest: { kind: MonsterId; t: number } | null; feats: { aegis: number; tar: number; stones: number; backline: number; cross: number; overkill: number };
+  gateWard: { t: number; used: boolean; prev: number }; wave: number[]; waveGo: boolean; waveT: number; obstacles: Obstacle[];
 }
+export type Stance = "steady" | "panic" | "fury";
+export const STANCE_NAME: Record<Stance, string> = { steady: "Выдержка", panic: "Паника", fury: "Последний рубеж" };
+export interface Tar { x: number; y: number; d: number; t: number; fire: number }
+export interface Obstacle { kind: "barricade" | "cover"; d: number; x: number; y: number; ang: number; hp: number; maxHp: number; hitT: number }
+/** Barricades block walkers on the road (from region II); one ruin gives cover from arrows. */
+export const OBSTACLE = { barricadeShare: 0.08, at: [0.42, 0.66], coverAt: 0.3 } as const;
+export const WAVE = { max: 3, gap: 0.35 } as const;
 export type AdaptMode = "pierce" | "splash" | "reveal" | "air" | "nodecoy";
 export const ADAPT_NAME: Record<AdaptMode, string> = { pierce: "бронебой", splash: "картечь", reveal: "прожекторы", air: "зенитки", nodecoy: "приманка раскрыта" };
 export interface DefenseAI { modes: Set<AdaptMode>; t: number; seen: Partial<Record<MonsterId, number>>; calmT: number }
 /** How strongly each counter-mode works (kept here so tests and UI read the same numbers). */
-export const ADAPT = { pierce: 0.5, splash: { radius: 45, share: 0.5 }, reveal: 150, air: 1.4, decoyAfter: 3, every: 2, repairAfter: 4, repairRate: 0.006, saveSuperFor: 3, saveSuperMax: 4 } as const;
+export const ADAPT = { pierce: 0.5, splash: { radius: 45, share: 0.5 }, reveal: 150, air: 1.4, decoyAfter: 5, dodge: 0.25, tankMass: { n: 2, armor: 0.3, dmg: 1.2 }, shamanWard: 0.15, every: 1.5, repairAfter: 4, repairRate: 0.006, saveSuperFor: 3, saveSuperMax: 4,
+  mark: { every: 4.5, dur: 5, bonus: 1.3 }, combo: 0.35, panicAt: 0.3, panicRate: 0.8, panicMiss: 0.15, furyLast: 15, furyDmg: 1.2,
+  breakRadius: 80, breakSiege: 1.5, breakKeep: 0.4, cover: { radius: 70, arrow: 0.6 },
+  /** tower abilities unlocked by region: retaliation (II+), field repair of neighbours (III+), gate ward (IV+) */
+  rage: { fromLoc: 1, dur: 4, rate: 0.65 },
+  backline: { tankHp: 330, watchers: 2 }, aegis: { fromLoc: 1, every: 20, radius: 230 }, cross: { sync: 0.6, noLifesteal: 3, cd: 2.5 },
+  stones: { min: 7, max: 9, warn: 0.8, radius: 60, dmg: 55 }, tar: { fromLoc: 1, every: 15, first: 12, life: 9, radius: 44, slow: 0.5, fire: 4, burn: 22, ignite: 1.1 },
+  rush: { window: 1.5, dur: 6, speed: 1.2 }, slowMo: { at: 0.05, dur: 0.6, k: 3 }, mend: { fromLoc: 2, radius: 190, rate: 0.02 }, ward: { fromLoc: 3, at: 0.3, dur: 7, absorb: 0.6 } } as const;
 export interface EssenceOrb { x: number; y: number; t: number; v: number }
 export interface ShoutFx { who: CharId; text: string; life: number; max: number }
 export interface Splinter { x: number; y: number; vx: number; vy: number; rot: number; vr: number; life: number; len: number }
@@ -89,8 +116,11 @@ export function createBattle(level: LevelDef, squad: { kind: MonsterId; lvl: num
     shake: 0, gateStage: 0, gateHitT: 0, result: null, stats: { summoned: 0, towersDown: 0, reached: 0 }, nextId: 1,
     mods, syn: new Set(activeSynergies(squad.map((s) => s.kind))), berserkT: 0, smoke: null,
     champs: [], champWave: 0, oilT: 0, oilCd: 0, firstUsed: false, decals: [], corpses: [], breachT: 0, gateDent: 0,
-    queue: null, orbs: [], shouts: [], shoutDone: new Set(), fistHits: 0, gateBeat: 0, legionMinion: false, hitStop: 0, splinters: [],
+    tars: [], tarCd: ADAPT.tar.first, stone: null, stoneCd: ADAPT.stones.min, lastTankT: -99, slowMo: 0, slowMoDone: false,
+    wasted: 0, longest: null, feats: { aegis: 0, tar: 0, stones: 0, backline: 0, cross: 0, overkill: 0 },
+    gateWard: { t: 0, used: false, prev: level.gateHp }, queue: null, orbs: [], shouts: [], shoutDone: new Set(), fistHits: 0, gateBeat: 0, legionMinion: false, hitStop: 0, splinters: [],
     ai: { modes: new Set([...(mods.adapt ?? []), LOCATIONS[level.loc]!.puzzle.mode] as AdaptMode[]), t: 0, seen: {}, calmT: 0 },
+    mark: { u: null, t: 0, cd: 3 }, stance: "steady", wave: [], waveGo: false, waveT: 0, obstacles: placeObstacles(level, path),
   };
   let k = 0;
   slots.forEach((s, i) => {
@@ -104,10 +134,37 @@ export function createBattle(level: LevelDef, squad: { kind: MonsterId; lvl: num
   }
   return b;
 }
+export function placeObstacles(level: LevelDef, path: PathGeo): Obstacle[] {
+  if (level.loc < 1) return [];
+  const out: Obstacle[] = []; const n = level.loc >= 3 ? 2 : 1; const hp = Math.round(level.gateHp * OBSTACLE.barricadeShare);
+  for (let i = 0; i < n; i++) { const d = path.len * OBSTACLE.at[i]!; const [x, y, ang] = path.posAt(d); out.push({ kind: "barricade", d, x, y, ang, hp, maxHp: hp, hitT: 0 }); }
+  const d = path.len * OBSTACLE.coverAt; const [px, py, a] = path.posAt(d);
+  out.push({ kind: "cover", d, x: px + Math.cos(a + Math.PI / 2) * 34, y: py + Math.sin(a + Math.PI / 2) * 34, ang: a, hp: 1, maxHp: 1, hitT: 0 });
+  return out;
+}
+function hitObstacle(b: Battle, o: Obstacle, dmg: number) {
+  if (o.hp <= 0) return;
+  o.hp -= dmg; o.hitT = 0.12; if (Math.random() < 0.15) burst(b, o.x, o.y - 6, 2, "#8a6a40", 0.4, 60, 2, 150);
+  if (o.hp <= 0) { o.hp = 0; burst(b, o.x, o.y, 30, "#8a6a40", 1, 180, 5, 300); text(b, o.x, o.y - 30, "Баррикада разбита!", "#ffcf5a"); sfx.towerDown(); b.shake = Math.max(b.shake, 4); }
+}
+export const inCover = (b: Battle, u: Unit) => b.obstacles.some((o) => o.kind === "cover" && Math.hypot(o.x - u.x, o.y - u.y) < ADAPT.cover.radius);
+function breakCharge(b: Battle, t: Tower) {
+  t.superT = 0; t.charge = ADAPT.breakKeep; text(b, t.x, t.y - 80, "ЗАРЯД СОРВАН!", "#9fe6ff");
+  burst(b, t.x, t.y - 40, 30, "#9fe6ff", 0.6, 200, 4); ring(b, t.x, t.y - 30, "#9fe6ff", 0.5); sfx.chargeBroken(); b.hitStop = Math.max(b.hitStop, 0.04);
+}
+/** Player's grouped wave: waits until every slot is ready and affordable, then releases them one after another. */
+export function waveCost(b: Battle, idxs: number[]) { return idxs.reduce((s, i) => s + summonCost(b, i), 0); }
+export function launchWave(b: Battle, idxs: number[]) { b.wave = [...new Set(idxs)].filter((i) => b.squad[i]).slice(0, WAVE.max); b.waveGo = false; b.waveT = 0; }
+function waveTick(b: Battle, dt: number) {
+  if (!b.wave.length) return;
+  if (!b.waveGo) { if (b.essence >= waveCost(b, b.wave) && b.wave.every((i) => b.squad[i]!.cd <= 0)) { b.waveGo = true; sfx.wave(); } else return; }
+  b.waveT -= dt; if (b.waveT > 0) return;
+  if (summon(b, b.wave[0]!)) { b.wave.shift(); b.waveT = WAVE.gap; if (!b.wave.length) b.waveGo = false; }
+}
 
 function makeTower(b: Battle, kind: TowerKind, slot: number, lvl: number): Tower {
   const s = b.slots[slot]!; const hp = TOWERS[kind].hp * b.level.towerMul;
-  return { id: b.nextId++, kind, slot, lvl, x: s.x, y: s.y, hp, maxHp: hp, mul: b.level.towerMul, cd: Math.random() * TOWERS[kind].rate, angle: 0, alive: true, ruinT: 0, flash: 0, frozenT: 0, blindT: 0, aim: null, upgradeT: 0, building: false, disabled: false, charge: Math.random() * 0.3, superT: 0, growT: 0, shots: 0, elite: false };
+  return { id: b.nextId++, kind, slot, lvl, x: s.x, y: s.y, hp, maxHp: hp, mul: b.level.towerMul, cd: Math.random() * TOWERS[kind].rate, angle: 0, alive: true, ruinT: 0, flash: 0, frozenT: 0, blindT: 0, aim: null, upgradeT: 0, building: false, disabled: false, charge: Math.random() * 0.3, superT: 0, growT: 0, shots: 0, elite: false, rageT: 0, aegis: 0, aegisCd: 6 + Math.random() * 4, dealt: 0 };
 }
 
 // ---------- helpers
@@ -150,9 +207,10 @@ export function spawnUnit(b: Battle, kind: MonsterId, lvl: number, d: number, mi
   const u: Unit = {
     id: b.nextId++, kind, lvl, d, x: 0, y: 0, hp, maxHp: hp, armor: Math.min(0.8, st.armor + m.armor), speed: st.speed * pack * m.speedMul, dps: st.dps * m.statMul, reach: def.reach,
     radius: def.radius, abil: st.ability, slowT: 0, stealthT: def.stealth ? def.stealth.dur * st.ability : 0, recloakT: 0, revived: false, reborn: false,
-    atGate: false, bob: Math.random() * 6, atkT: 0, buffed: false, shield: 0, hurtT: 0, burnT: 0, burnDps: 0, poisonT: 0, poisonDps: 0, minion, dead: false,
+    atGate: false, bob: Math.random() * 6, atkT: 0, buffed: false, buffHeal: 0, shield: 0, hurtT: 0, burnT: 0, burnDps: 0, poisonT: 0, poisonDps: 0, minion, dead: false,
     lane: (((b.nextId * 37) % 21) - 10) * 0.8, attacking: false, stunT: 0, spawnT: 0.35,
     legion: false, knock: 0, fireT: 0,
+    rushT: 0, tarT: 0, nolsT: 0, engaged: false, born: b.time, poisonBy: null, burnBy: null, crossT: 0,
   };
   placeUnit(b, u); b.units.push(u);
   if (def.blindOnSpawn) {
@@ -168,7 +226,26 @@ export function defenseAI(b: Battle, dt: number) {
   // gate repair while nobody threatens it (from region III)
   const threat = b.units.some((u) => !u.dead && Math.hypot(GATE.x - u.x, GATE.y - u.y) < 260);
   ai.calmT = threat ? 0 : ai.calmT + dt;
+  const w = b.gateWard; w.t = Math.max(0, w.t - dt);
+  if (w.t > 0 && b.gateHp < w.prev && b.gateHp > 0) b.gateHp += (w.prev - b.gateHp) * ADAPT.ward.absorb;
+  if (b.level.loc >= ADAPT.ward.fromLoc && !w.used && b.gateHp > 0 && b.gateHp < b.gateMax * ADAPT.ward.at) {
+    w.used = true; w.t = ADAPT.ward.dur; text(b, GATE.x - 140, GATE.y - 170, "ОБЕРЕГ ВОРОТ!", "#9fd8ff"); ring(b, GATE.x - 40, GATE.y, "#9fd8ff", 0.8); sfx.stance("steady");
+  }
+  w.prev = b.gateHp;
   if (b.level.loc >= 2 && ai.calmT > ADAPT.repairAfter && b.gateHp < b.gateMax && b.gateHp > 0) b.gateHp = Math.min(b.gateMax, b.gateHp + b.gateMax * ADAPT.repairRate * dt);
+  // spotter mark: the garrison agrees on one dangerous target in range; every tower deals more damage to it
+  const mk = b.mark; mk.t = Math.max(0, mk.t - dt); mk.cd -= dt;
+  if (mk.u && (mk.u.dead || mk.u.hp <= 0 || mk.t <= 0)) { mk.u = null; mk.t = 0; }
+  if (mk.cd <= 0) {
+    mk.cd = ADAPT.mark.every; let best: Unit | null = null, bs = -1;
+    for (const u of b.units) {
+      if (u.dead || u.minion || !canSee(b, u)) continue;
+      if (!b.towers.some((t) => t.alive && t.kind !== "bell" && Math.hypot(t.x - u.x, t.y - u.y) < TOWERS[t.kind].range * towerScale(t.lvl).range * 1.1)) continue;
+      const d = MONSTERS[u.kind]; const s = unitProgress(b, u) + (d.aura || d.raise ? 0.6 : 0) + (d.explode ? 0.4 : 0) + u.maxHp / 2000;
+      if (s > bs) { bs = s; best = u; }
+    }
+    if (best) { mk.u = best; mk.t = ADAPT.mark.dur; text(b, best.x, best.y - 50, "МЕТКА НАВОДЧИКА", "#ff5a4a"); sfx.markTarget(); }
+  }
   if (ai.t > 0) return; ai.t = ADAPT.every;
   const alive = b.units.filter((u) => !u.dead && !u.minion);
   const want = new Set<AdaptMode>();
@@ -183,15 +260,26 @@ export function defenseAI(b: Battle, dt: number) {
     if (t) { text(b, t.x, t.y - 90, `АДАПТАЦИЯ: ${ADAPT_NAME[m]}`, "#ff9a5a"); ring(b, t.x, t.y - 30, "#ff9a5a", 0.6); }
   }
 }
-/** Higher = shoot first. Healers and raisers, then bombers close to a target, then the furthest unit; others' targets get focus. */
-function threatScore(b: Battle, t: Tower, u: Unit) {
+/** Higher = shoot first. Healers and raisers, bombers near a target, the marked unit, slowed units for heavy guns, then the furthest; doomed targets are skipped. */
+/** Already-flying shots will kill this unit (armor and shields counted), so other guns should pick someone else. */
+export function doomed(b: Battle, u: Unit) {
+  let pend = 0; for (const p of b.projs) if (p.target === u && p.t < p.dur) pend += p.dmg;
+  return pend > 0 && pend * (1 - u.armor) * (1 - u.shield) >= u.hp;
+}
+export function threatScore(b: Battle, t: Tower, u: Unit) {
   const d = MONSTERS[u.kind]; let s = unitProgress(b, u);
   if (d.aura || d.raise) s += 0.6;
   if (d.explode && (GATE.x - u.x < 200 || b.towers.some((o) => o.alive && Math.hypot(o.x - u.x, o.y - u.y) < 120))) s += 0.5;
   if (b.towers.some((o) => o !== t && o.alive && o.aim === u)) s += 0.25;
+  if (b.mark.u === u && b.mark.t > 0) s += 0.4;
+  if ((t.kind === "cannon" || t.kind === "ballista") && (u.slowT > 0 || u.stunT > 0)) s += ADAPT.combo;
+  if (doomed(b, u)) s -= 5;
   return s;
 }
 export function summonCost(b: Battle, i: number) { const s = b.squad[i]; if (!s) return 0; const c = MONSTERS[s.kind].cost; return b.firstUsed ? c : Math.round(c * (1 - Math.min(0.9, b.mods.firstDiscount))); }
+/** Tank = heavy walker the garrison focuses; support = healer/shield/raiser/suppressor/artillery that should walk behind it. */
+export const isTank = (k: MonsterId) => { const d = MONSTERS[k]; return d.hp >= ADAPT.backline.tankHp && !d.ranged && !d.flying; };
+export const isSupport = (k: MonsterId) => { const d = MONSTERS[k]; return !!(d.aura || d.shieldAura || d.raise || d.runeAura || d.ranged); };
 export function noteSummon(b: Battle, kind: MonsterId) { b.ai.seen[kind] = (b.ai.seen[kind] ?? 0) + 1; }
 export function canSummon(b: Battle, i: number) { const s = b.squad[i]; return !!s && !b.result && s.cd <= 0 && b.essence >= summonCost(b, i); }
 export function summon(b: Battle, i: number) {
@@ -199,7 +287,13 @@ export function summon(b: Battle, i: number) {
   const s = b.squad[i]!; const def = MONSTERS[s.kind];
   b.essence -= summonCost(b, i); b.firstUsed = true; s.cd = def.cooldown * b.mods.cooldownMul; b.stats.summoned++; fstat(b, s.kind).summoned++; noteSummon(b, s.kind);
   const n = def.swarm ?? 1;
-  for (let k = 0; k < n; k++) spawnUnit(b, s.kind, s.lvl, -k * 14);
+  const spawned: Unit[] = []; for (let k = 0; k < n; k++) spawned.push(spawnUnit(b, s.kind, s.lvl, -k * (n > 1 ? 26 : 14)));
+  if (isTank(s.kind)) b.lastTankT = b.time;
+  else if (isSupport(s.kind) && b.time - b.lastTankT <= ADAPT.rush.window) {
+    for (const u of spawned) u.rushT = ADAPT.rush.dur;
+    const lead = b.units.filter((u) => !u.dead && isTank(u.kind) && b.time - u.born <= ADAPT.rush.window); for (const u of lead) u.rushT = ADAPT.rush.dur;
+    text(b, b.path.pts[0]![0] + 80, b.path.pts[0]![1] - 50, "ВОЛНА ПРОРЫВА!", "#ffcf5a"); b.lastTankT = -99;
+  }
   const p = b.path.pts[0]!; burst(b, p[0] + 40, p[1], 30, "#9b5cff", 0.6); ring(b, p[0] + 30, p[1], "#b07cff", 0.5); sfx.summon(); sfx.voice(s.kind);
   if (b.syn.has("pack") && SYNERGIES[0]!.members.includes(s.kind)) for (let k = 0; k < 14; k++) b.parts.push({ x: p[0] + 20, y: p[1] + (Math.random() - 0.5) * 24, vx: 260 + Math.random() * 160, vy: 0, life: 0.35, max: 0.35, size: 3, color: "#ffcf5a", grav: 0 });
   return true;
@@ -230,18 +324,23 @@ function gateImpact(b: Battle, y: number, heavy: boolean) {
   }
 }
 
+/** The dragon flies a straight line to the gate, so every tower on the map may fire at it. */
+const DRAGON_REACH = 1.8;
+function inReach(t: Tower, u: Unit, range: number) { return Math.hypot(u.x - t.x, u.y - t.y) <= range * (MONSTERS[u.kind].fireBreath ? DRAGON_REACH : 1); }
+
 function frontUnit(b: Battle) { let f: Unit | null = null; for (const u of b.units) if (!u.dead && (!f || unitProgress(b, u) > unitProgress(b, f))) f = u; return f; }
 
 export function castSpell(b: Battle, ax?: number, ay?: number) {
   if (b.result || b.spellCd > 0) return false;
   const front = frontUnit(b);
-  if ((b.spell === "bloodrain" || b.spell === "raise" || b.spell === "berserk") && !front) return false;
+  if ((b.spell === "bloodrain" || b.spell === "berserk") && !front) { text(b, 560, 140, "Нет войск на поле", "#ffcf5a"); return false; }
   // aimed spells fall back to the tower nearest the front line (used by the bot)
   if (SPELLS[b.spell].target && (ax === undefined || ay === undefined)) {
     const ref = front ?? { x: b.path.pts[0]![0], y: b.path.pts[0]![1] };
     const t = b.towers.filter((t) => t.alive).sort((a, c) => Math.hypot(a.x - ref.x, a.y - ref.y) - Math.hypot(c.x - ref.x, c.y - ref.y))[0];
     if (!t) return false; ax = t.x; ay = t.y;
   }
+  if (ax !== undefined && ay !== undefined) for (const t of b.towers) if (t.alive && t.superT > 0 && Math.hypot(t.x - ax, t.y - ay) < 130) breakCharge(b, t);
   if (b.spell === "meteor") {
     const t = b.towers.filter((t) => t.alive && Math.hypot(t.x - ax!, t.y - ay!) < 90).sort((a, c) => Math.hypot(a.x - ax!, a.y - ay!) - Math.hypot(c.x - ax!, c.y - ay!))[0];
     if (!t) return false;
@@ -277,10 +376,13 @@ export function castSpell(b: Battle, ax?: number, ay?: number) {
     for (const t of ts) { for (let i = 0; i < 25; i++) b.parts.push({ x: t.x + (Math.random() - 0.5) * 60, y: t.y - 200 - Math.random() * 100, vx: 0, vy: 500, life: 0.5, max: 0.5, size: 3, color: "#c01020", grav: 0 }); hurtTower(b, t, 180, "spell", true); }
     sfx.explosion();
   }
-  if (b.spell === "raise" && front) {
+  if (b.spell === "raise") {
+    // rises at the front line, or at the spawn point when the field is empty
     const n = Math.min(6, Math.max(3, b.deathSpots.length)); b.deathSpots.splice(0, n);
-    for (let i = 0; i < n; i++) spawnUnit(b, "minion", 3, Math.max(0, front.d - i * 12), true);
-    burst(b, front.x, front.y, 30, "#7dff9a", 0.8, 150); sfx.revive();
+    const lvl = Math.max(3, Math.round(b.squad.reduce((a, s) => a + s.lvl, 0) / Math.max(1, b.squad.length)));
+    const at = front && !MONSTERS[front.kind].flying ? front.d : 0;
+    for (let i = 0; i < n; i++) { const m = spawnUnit(b, "minion", lvl, Math.max(0, at - i * 12), true); burst(b, m.x, m.y, 12, "#7dff9a", 0.7, 90); }
+    text(b, 560, 140, `Восстали ${n} скелетов!`, "#7dff9a"); sfx.revive();
   }
   b.shake = Math.max(b.shake, 4);
   return true;
@@ -290,11 +392,16 @@ function decal(b: Battle, x: number, y: number, kind: Decal["kind"], size: numbe
   b.decals.push({ x, y, kind, size: size * (0.8 + Math.random() * 0.4), rot: Math.random() * Math.PI * 2, life: 45 });
   if (b.decals.length > 140) b.decals.shift();
 }
-function hurtUnit(b: Battle, u: Unit, dmg: number, how: "arrow" | "blast" | null = null) {
+function hurtUnit(b: Battle, u: Unit, dmg: number, how: "arrow" | "blast" | null = null, from?: Tower) {
   if (u.dead || u.hp <= 0) return;
-  const weak = (how === "arrow" ? MONSTERS[u.kind].arrowWeak ?? 1 : 1) * (b.ai.modes.has("air") && MONSTERS[u.kind].flying ? ADAPT.air : 1);
-  const armor = b.ai.modes.has("pierce") && how !== "blast" ? u.armor * ADAPT.pierce : u.armor;
-  { const d = dmg * weak * (1 - armor) * (1 - u.shield); u.hp -= d; u.hurtT = 0.12; if (!u.minion) fstat(b, u.kind).taken += Math.min(d, Math.max(0, u.hp + d)); }
+  const weak = (how === "arrow" ? MONSTERS[u.kind].arrowWeak ?? 1 : 1) * (b.ai.modes.has("air") && MONSTERS[u.kind].flying ? ADAPT.air : 1)
+    * (b.mark.u === u && b.mark.t > 0 ? ADAPT.mark.bonus : 1) * (how === "arrow" && inCover(b, u) ? ADAPT.cover.arrow : 1);
+  if (MONSTERS[u.kind].decoy && how !== "blast" && Math.random() < ADAPT.dodge) { text(b, u.x, u.y - 24, "мимо", "#cfd6c4"); return; }
+  let armor = b.ai.modes.has("pierce") && how !== "blast" ? u.armor * ADAPT.pierce : u.armor;
+  // mass of tanks: garrison switches to armour-piercing bolts against a tank wall
+  let wall = 1;
+  if (isTank(u.kind) && b.units.filter((o) => !o.dead && isTank(o.kind)).length >= ADAPT.tankMass.n) { armor *= ADAPT.tankMass.armor; wall = ADAPT.tankMass.dmg; }
+  { const d = dmg * weak * wall * (1 - armor) * (1 - u.shield); if (from) from.dealt += Math.min(d, Math.max(0, u.hp)); u.hp -= d; u.hurtT = 0.12; if (!u.minion) fstat(b, u.kind).taken += Math.min(d, Math.max(0, u.hp + d)); }
   if (how === "blast") u.knock = 0.25;
   burst(b, u.x, u.y, 3, "#a3141c", 0.4, 60, 2, 200);
   const st = MONSTERS[u.kind].stealth;
@@ -302,8 +409,12 @@ function hurtUnit(b: Battle, u: Unit, dmg: number, how: "arrow" | "blast" | null
 }
 function hurtTower(b: Battle, t: Tower, dmg: number, by?: MonsterId | "spell", big = false) {
   if (!t.alive) return;
+  if (t.aegis > 0 && by && by !== "spell" && (big || (MONSTERS[by].siege ?? 0) >= 1.8)) {
+    t.aegis = 0; b.feats.aegis++; text(b, t.x, t.y - 64, "ОБЕРЕГ ПОГЛОТИЛ!", "#9fd8ff"); ring(b, t.x, t.y - 30, "#9fd8ff", 0.5); burst(b, t.x, t.y - 30, 18, "#bfe8ff", 0.5, 120); return;
+  }
   if (by && by !== "spell") { const md = MONSTERS[by]; const g = REGION_GUARD[b.level.loc] ?? REGION_GUARD[0]!; dmg *= 1 - (md.explode || md.ranged || md.deathBurst ? g.blast : g.melee); }
   { const d = Math.min(dmg, t.hp); dealt(b, by, d); num(b, t, t.x, t.y - 46, d, big ? "big" : "hit"); if (big && d > t.maxHp * 0.25) b.hitStop = Math.max(b.hitStop, 0.035); }
+  if (b.level.loc >= ADAPT.rage.fromLoc && by && by !== "spell") { const md = MONSTERS[by]; if ((md.explode || md.ranged || (md.siege ?? 0) >= 1.8) && t.rageT <= 0) { t.rageT = ADAPT.rage.dur; text(b, t.x, t.y - 60, "Ответный огонь!", "#ff7a4a"); } }
   t.hp -= dmg; t.flash = 0.08; t.charge = Math.min(1, t.charge + (dmg / t.maxHp) * SUPER.hurtFill);
   if (t.hp <= 0) {
     t.alive = false; t.hp = 0; t.upgradeT = 0; t.ruinT = 0; b.stats.towersDown++;
@@ -327,16 +438,21 @@ export function update(b: Battle, dt: number) {
   b.essence = Math.min(MAX_ESSENCE, b.essence + b.level.essenceRate * b.mods.essenceMul * dt);
   for (const s of b.squad) s.cd = Math.max(0, s.cd - dt);
   if (b.queue !== null && canSummon(b, b.queue)) { summon(b, b.queue); b.queue = null; }
+  waveTick(b, dt);
   if (b.time < 1.5) shout(b, "start"); if (b.gateHp / b.gateMax <= 0.5) shout(b, "half");
   b.spellCd = Math.max(0, b.spellCd - dt); b.marchT = Math.max(0, b.marchT - dt); b.darkT = Math.max(0, b.darkT - dt); b.berserkT = Math.max(0, b.berserkT - dt);
+  for (const o of b.obstacles) o.hitT = Math.max(0, o.hitT - dt);
+  { const st: Stance = b.gateHp / b.gateMax < ADAPT.panicAt ? "panic" : b.level.timeLimit - b.time < ADAPT.furyLast ? "fury" : "steady";
+    if (st !== b.stance) { b.stance = st; text(b, GATE.x - 70, GATE.y - 150, `ГАРНИЗОН: ${STANCE_NAME[st].toUpperCase()}`, st === "panic" ? "#9fe6ff" : "#ff6a4a"); sfx.stance(st); } }
   if (b.smoke) { b.smoke.t -= dt; for (const t of b.towers) if (t.alive && Math.hypot(t.x - b.smoke.x, t.y - b.smoke.y) < 120) t.blindT = Math.max(t.blindT, 0.2); if (b.smoke.t <= 0) b.smoke = null; }
 
   const alive = b.units.filter((u) => !u.dead);
   // aura pass
-  for (const u of alive) { u.buffed = false; u.shield = 0; }
+  for (const u of alive) { u.buffed = false; u.buffHeal = 0; u.shield = 0; if (u.attacking) u.engaged = true; u.tarT = Math.max(0, u.tarT - dt); u.rushT = Math.max(0, u.rushT - dt); u.nolsT = Math.max(0, u.nolsT - dt); u.crossT = Math.max(0, u.crossT - dt); }
+  tarTraps(b, dt, alive);
   for (const src of alive) {
     const d = MONSTERS[src.kind];
-    if (d.aura) for (const u of alive) if (Math.hypot(src.x - u.x, src.y - u.y) < d.aura.radius) u.buffed = true;
+    if (d.aura) { const heal = d.aura.heal * statMul(src.lvl, d.rarity) * b.mods.statMul; for (const u of alive) if (Math.hypot(src.x - u.x, src.y - u.y) < d.aura.radius) { u.buffed = true; u.buffHeal = Math.max(u.buffHeal, heal); u.shield = Math.max(u.shield, ADAPT.shamanWard); } }
     if (d.shieldAura) for (const u of alive) if (Math.hypot(src.x - u.x, src.y - u.y) < d.shieldAura.radius) u.shield = Math.max(u.shield, Math.min(0.6, d.shieldAura.reduce * src.abil));
   }
   for (const t of b.towers) {
@@ -347,12 +463,12 @@ export function update(b: Battle, dt: number) {
   // units
   for (const u of alive) {
     const def = MONSTERS[u.kind];
-    if (u.buffed) { const h = Math.min(u.maxHp - u.hp, 7 * dt); u.hp += h; num(b, u.id * 7 + 1, u.x, u.y - 26, h, "heal"); }
-    if (u.poisonT > 0) { u.poisonT -= dt; u.hp -= u.poisonDps * dt; if (Math.random() < dt * 8) burst(b, u.x, u.y - 10, 1, "#8fe04a", 0.6, 15, 3, -40); }
-    if (u.burnT > 0) { u.burnT -= dt; u.hp -= u.burnDps * dt; if (Math.random() < dt * 10) burst(b, u.x, u.y - 8, 1, "#ff8a2a", 0.4, 20, 3, -60); }
+    if (u.buffed) { const h = Math.min(u.maxHp - u.hp, u.buffHeal * dt); u.hp += h; num(b, u.id * 7 + 1, u.x, u.y - 26, h, "heal"); }
+    if (u.poisonT > 0) { u.poisonT -= dt; if (u.poisonBy) u.poisonBy.dealt += Math.min(u.poisonDps * dt, Math.max(0, u.hp)); u.hp -= u.poisonDps * dt; if (Math.random() < dt * 8) burst(b, u.x, u.y - 10, 1, "#8fe04a", 0.6, 15, 3, -40); }
+    if (u.burnT > 0) { u.burnT -= dt; if (u.burnBy) u.burnBy.dealt += Math.min(u.burnDps * dt, Math.max(0, u.hp)); u.hp -= u.burnDps * dt; if (Math.random() < dt * 10) burst(b, u.x, u.y - 8, 1, "#ff8a2a", 0.4, 20, 3, -60); }
     u.spawnT = Math.max(0, u.spawnT - dt); u.stunT = Math.max(0, u.stunT - dt); u.slowT = Math.max(0, u.slowT - dt); u.stealthT = Math.max(0, u.stealthT - dt); u.recloakT = Math.max(0, u.recloakT - dt); u.hurtT = Math.max(0, u.hurtT - dt); u.knock = Math.max(0, u.knock - dt);
-    if (b.berserkT > 0) { u.stunT = 0; u.slowT = 0; }
-    const sp = u.speed * (u.buffed ? 1.3 : 1) * (b.marchT > 0 ? 1.8 : 1) * (u.slowT > 0 ? 0.5 : 1) * (u.stunT > 0 ? 0 : 1);
+    if (b.berserkT > 0) { u.stunT = 0; u.slowT = 0; u.tarT = 0; }
+    const sp = u.speed * (u.buffed ? 1.3 : 1) * (b.marchT > 0 ? 1.8 : 1) * (u.slowT > 0 ? 0.5 : 1) * (u.tarT > 0 ? ADAPT.tar.slow : 1) * (u.rushT > 0 ? ADAPT.rush.speed : 1) * (u.stunT > 0 ? 0 : 1);
     u.bob += dt * sp * 0.15;
     const end = def.flying ? b.flyLen : b.path.len;
     if (def.ranged) {
@@ -366,23 +482,29 @@ export function update(b: Battle, dt: number) {
         const tx = tgt ? tgt.x : GATE.x - 20, ty = tgt ? tgt.y : GATE.y - 10;
         b.projs.push({ kind: "rock", x: u.x, y: u.y - 20, sx: u.x, sy: u.y - 20, tx, ty, t: 0, dur: 1.1, target: null, dmg: rg.dmg * u.abil * statMul(u.lvl, MONSTERS[u.kind].rarity) * b.mods.statMul, splash: rg.splash, lvl: u.lvl, by: u.kind });
         sfx.catapult();
+        // recoil: every shot shakes the frame apart, so a catapult cannot shell forever
+        if (rg.recoil) { u.hp -= u.maxHp * rg.recoil; burst(b, u.x, u.y - 10, 6, "#8a6a40", 0.5, 90, 3, 200); if (u.hp <= 0) { u.hp = 0; text(b, u.x, u.y - 30, "Развалилась!", "#c8a070"); } }
       }
       continue;
     }
+    let blocked: Obstacle | null = null;
     if (!u.atGate) {
       const ch = b.champs.find((c) => !c.dead && Math.hypot(c.x - u.x, c.y - u.y) < 30);
-      if (!ch) { u.d += sp * dt; if (u.d >= end) { u.d = end; u.atGate = true; if (!u.minion) b.stats.reached++; } placeUnit(b, u); }
+      if (!def.flying) blocked = b.obstacles.find((o) => o.kind === "barricade" && o.hp > 0 && u.d < o.d && u.d + sp * dt >= o.d - 10) ?? null;
+      if (blocked) { u.d = Math.max(u.d, blocked.d - 10); placeUnit(b, u); }
+      else if (!ch) { u.d += sp * dt; if (u.d >= end) { u.d = end; u.atGate = true; if (!u.minion) b.stats.reached++; } placeUnit(b, u); }
     }
 
     if (def.explode) {
       const near = b.towers.find((t) => t.alive && Math.hypot(t.x - u.x, t.y - u.y) < u.reach);
-      if (near || u.atGate || Math.hypot(GATE.x - u.x, GATE.y - u.y) < 70) {
+      if (near || blocked || u.atGate || Math.hypot(GATE.x - u.x, GATE.y - u.y) < 70) {
+        for (const o of b.obstacles) if (o.kind === "barricade" && Math.abs(o.d - u.d) < def.explode.radius) hitObstacle(b, o, def.explode.dmg * u.abil * statMul(u.lvl, def.rarity));
         const dmg = def.explode.dmg * u.abil * statMul(u.lvl, def.rarity);
-        u.hp = 0; u.dead = true; explosion(b, u.x, u.y, 1.6); sfx.explosion();
+        u.hp = 0; u.dead = true; u.engaged = true; explosion(b, u.x, u.y, 1.6); sfx.explosion();
         decal(b, u.x, u.y + 2, "soot", 30);
         for (const o of b.units) if (o !== u && !o.dead && Math.hypot(o.x - u.x, o.y - u.y) < 60 && o.radius <= 11) o.knock = 0.25;
         for (const c of b.champs) if (!c.dead && Math.hypot(c.x - u.x, c.y - u.y) < def.explode.radius) c.hp -= dmg;
-        for (const t of b.towers) if (t.alive && Math.hypot(t.x - u.x, t.y - u.y) < def.explode.radius + 20) hurtTower(b, t, dmg * towerMul(b), u.kind, true);
+        for (const t of b.towers) if (t.alive && Math.hypot(t.x - u.x, t.y - u.y) < def.explode.radius + 20) hurtTower(b, t, dmg * towerMul(b) * (def.explode.towerMul ?? 1), u.kind, true);
         if (Math.hypot(GATE.x - u.x, GATE.y - u.y) < def.explode.radius + 50) { b.gateHp -= dmg * 1.7; b.gateHitT = 0.3; dealt(b, u.kind, dmg * 1.7); num(b, "gb", GATE.x - 50, GATE.y - 90, dmg * 1.7, "big"); sfx.gateHit(); gateImpact(b, u.y, true); }
       }
       continue;
@@ -397,6 +519,7 @@ export function update(b: Battle, dt: number) {
     }
     u.attacking = false;
     const mult = (u.buffed ? 1.25 : 1) * (b.berserkT > 0 ? 2 : 1);
+    if (blocked) { if (u.dps > 0) hitObstacle(b, blocked, u.dps * mult * (def.siege ?? 1) * dt); u.attacking = true; continue; }
     const champ = b.champs.find((c) => !c.dead && Math.hypot(c.x - u.x, c.y - u.y) < u.reach * 0.6 + 14);
     if (champ && u.dps > 0) { champ.hp -= u.dps * mult * dt; u.attacking = true; if (Math.random() < dt * 4) burst(b, champ.x, champ.y - 14, 2, "#e8e0c8", 0.3, 60, 2, 150); continue; }
     if (u.atGate) {
@@ -415,7 +538,7 @@ export function update(b: Battle, dt: number) {
     if (t) {
       u.attacking = true;
       const dmg = u.dps * mult * towerMul(b) * dt; hurtTower(b, t, dmg, u.kind);
-      if (def.lifesteal) { const h = Math.min(u.maxHp - u.hp, dmg * def.lifesteal * u.abil); u.hp += h; num(b, u.id * 7 + 1, u.x, u.y - 26, h, "heal"); }
+      if (def.lifesteal && u.nolsT <= 0) { const h = Math.min(u.maxHp - u.hp, dmg * def.lifesteal * u.abil); u.hp += h; num(b, u.id * 7 + 1, u.x, u.y - 26, h, "heal"); }
       if (Math.random() < dt * 4) burst(b, t.x, t.y, 2, "#c8b89a", 0.4, 60, 2, 150);
       if (def.freeze) { u.atkT -= dt; if (u.atkT <= 0) { u.atkT = def.freeze.every; t.frozenT = def.freeze.dur * u.abil; burst(b, t.x, t.y - 20, 18, "#bff3ff", 0.6, 90); sfx.freeze(); } }
     }
@@ -443,14 +566,14 @@ export function update(b: Battle, dt: number) {
       return false;
     }
     if (p.kind === "arrow") {
-      if (p.target && !p.target.dead && p.target.hp > 0) { hurtUnit(b, p.target, p.dmg, "arrow"); if (p.lvl >= 3) { p.target.burnT = 2; p.target.burnDps = p.dmg * 0.5; } sfx.hit(); }
+      if (p.target && !p.target.dead && p.target.hp > 0) { hurtUnit(b, p.target, p.dmg, "arrow", p.from); if (p.lvl >= 3) { p.target.burnT = 2; p.target.burnDps = p.dmg * 0.5; p.target.burnBy = p.from ?? null; } sfx.hit(); }
       else if (Math.random() < 0.5) decal(b, p.tx, p.ty, "arrow", 8);
-      if (p.splash > 0 && !p.target) { burst(b, p.tx, p.ty, 4, "#e8d8b0", 0.3, 50, 2); for (const u of b.units) if (Math.hypot(u.x - p.tx, u.y - p.ty) < p.splash) hurtUnit(b, u, p.dmg * 0.5); }
-      else if (p.splash > 0 && p.target) { const c = p.target; burst(b, c.x, c.y, 5, "#ffb070", 0.3, 60, 2); for (const u of b.units) if (u !== c && Math.hypot(u.x - c.x, u.y - c.y) < p.splash) hurtUnit(b, u, p.dmg * ADAPT.splash.share); }
+      if (p.splash > 0 && !p.target) { burst(b, p.tx, p.ty, 4, "#e8d8b0", 0.3, 50, 2); for (const u of b.units) if (Math.hypot(u.x - p.tx, u.y - p.ty) < p.splash) hurtUnit(b, u, p.dmg * 0.5, null, p.from); }
+      else if (p.splash > 0 && p.target) { const c = p.target; burst(b, c.x, c.y, 5, "#ffb070", 0.3, 60, 2); for (const u of b.units) if (u !== c && Math.hypot(u.x - c.x, u.y - c.y) < p.splash) hurtUnit(b, u, p.dmg * ADAPT.splash.share, null, p.from); }
     } else {
       explosion(b, p.tx, p.ty, p.kind === "mini" ? 0.35 : 0.6);
       if (p.kind === "ball") decal(b, p.tx, p.ty, "crater", 18);
-      for (const u of b.units) if (Math.hypot(u.x - p.tx, u.y - p.ty) < p.splash) hurtUnit(b, u, p.dmg, "blast");
+      for (const u of b.units) if (Math.hypot(u.x - p.tx, u.y - p.ty) < p.splash) hurtUnit(b, u, p.dmg, "blast", p.from);
       if (p.kind === "ball" && p.lvl >= 3) for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; b.projs.push({ kind: "mini", x: p.tx, y: p.ty, sx: p.tx, sy: p.ty, tx: p.tx + Math.cos(a) * 55, ty: p.ty + Math.sin(a) * 55, t: 0, dur: 0.35, target: null, dmg: p.dmg * 0.4, splash: 35, lvl: 1 }); }
     }
     return false;
@@ -466,6 +589,10 @@ export function update(b: Battle, dt: number) {
       u.legion = true; u.hp = u.maxHp * 0.4; burst(b, u.x, u.y, 22, "#7dff9a", 0.8, 100); text(b, u.x, u.y - 24, "Легион!", "#7dff9a"); sfx.revive(); continue;
     }
     u.dead = true;
+    if (!u.minion) {
+      if (!u.engaged && !u.atGate) b.wasted += Math.round(def.cost / (def.swarm ?? 1));
+      const life = b.time - u.born; if (!b.longest || life > b.longest.t) b.longest = { kind: u.kind, t: life };
+    }
     if (b.syn.has("legion") && !b.legionMinion && !u.minion) {
       b.legionMinion = true; const m = spawnUnit(b, "minion", u.lvl, u.d, true);
       burst(b, m.x, m.y, 24, "#7dff9a", 0.9, 110); ring(b, m.x, m.y, "#7dff9a", 0.5); text(b, m.x, m.y - 30, "Легион не отступает!", "#7dff9a"); sfx.revive();
@@ -496,6 +623,7 @@ export function update(b: Battle, dt: number) {
     burst(b, GATE.x - 10, GATE.y - 20, 40, "#c8a070", 1, 200, 5, 300); burst(b, GATE.x - 10, GATE.y - 40, 20, "#ffcf5a", 0.6, 160, 3);
     text(b, GATE.x - 40, GATE.y - 130, stage === 1 ? "Ворота трещат!" : "Ворота рушатся!", "#ffcf5a");
   }
+  if (!b.slowMoDone && b.gateHp < b.gateMax * ADAPT.slowMo.at) { b.slowMoDone = true; b.slowMo = ADAPT.slowMo.dur; sfx.slowMo(); }
   if (b.gateHp <= 0) {
     b.gateHp = 0; b.result = "won"; b.shake = 20; shout(b, "fall");
     for (let i = 0; i < 6; i++) explosion(b, GATE.x + (Math.random() - 0.5) * 60, GATE.y + (Math.random() - 0.5) * 100, 2);
@@ -512,7 +640,7 @@ function towerTick(b: Battle, t: Tower, dt: number) {
     }
     return;
   }
-  t.growT = Math.max(0, t.growT - dt); t.flash = Math.max(0, t.flash - dt); t.frozenT = Math.max(0, t.frozenT - dt); t.blindT = Math.max(0, t.blindT - dt);
+  t.rageT = Math.max(0, t.rageT - dt); t.growT = Math.max(0, t.growT - dt); t.flash = Math.max(0, t.flash - dt); t.frozenT = Math.max(0, t.frozenT - dt); t.blindT = Math.max(0, t.blindT - dt);
   if (t.upgradeT > 0) {
     t.upgradeT -= dt;
     if (t.upgradeT <= 0) {
@@ -525,10 +653,12 @@ function towerTick(b: Battle, t: Tower, dt: number) {
     if (Math.random() < dt * 6) burst(b, t.x + (Math.random() - 0.5) * 40, t.y, 1, "#a89878", 0.8, 30, 4, -20);
   }
   const def = TOWERS[t.kind]; const sc = towerScale(t.lvl);
-  const range = def.range * sc.range, dmg = def.dmg * sc.dmg * t.mul;
+  const range = def.range * sc.range, dmg = def.dmg * sc.dmg * t.mul * (b.stance === "fury" ? ADAPT.furyDmg : 1);
   t.cd -= dt;
   if (t.frozenT > 0 || t.blindT > 0 || t.disabled) return;
   if (t.superT > 0) {
+    // heavy siege monsters and bombers next to a charging tower break its super
+    if (b.units.some((u) => !u.dead && ((MONSTERS[u.kind].siege ?? 0) >= ADAPT.breakSiege || MONSTERS[u.kind].explode) && Math.hypot(u.x - t.x, u.y - t.y) < ADAPT.breakRadius)) { breakCharge(b, t); return; }
     t.superT -= dt;
     if (Math.random() < dt * 30) burst(b, t.x, t.y - 40, 1, "#ffe9a0", 0.5, 60, 3, -80);
     if (t.superT <= 0) { t.superT = 0; t.charge = 0; fireSuper(b, t, range, dmg); }
@@ -539,7 +669,23 @@ function towerTick(b: Battle, t: Tower, dt: number) {
     if (crowd < ADAPT.saveSuperFor && (t.ruinT -= dt) > -ADAPT.saveSuperMax) { /* holding the super for a crowd (ruinT is unused while alive) */ } else { t.ruinT = 0; t.superT = SUPER.windup; text(b, t.x, t.y - 70, "Суперзаряд!", "#ffe9a0"); sfx.superCharge(); return; }
   } else if (t.charge >= 1) { t.superT = SUPER.windup; text(b, t.x, t.y - 70, "Суперзаряд!", "#ffe9a0"); sfx.superCharge(); return; }
   const engaged = t.kind === "bell" ? b.units.length > 0 : b.units.some((u) => Math.hypot(u.x - t.x, u.y - t.y) < range * 1.15);
+  if (!engaged && t.kind !== "bell" && b.level.loc >= ADAPT.mend.fromLoc) {
+    // idle crews patch up a damaged neighbour
+    let hurt: Tower | null = null;
+    for (const o of b.towers) if (o !== t && o.alive && !o.building && o.hp < o.maxHp && Math.hypot(o.x - t.x, o.y - t.y) < ADAPT.mend.radius && (!hurt || o.hp / o.maxHp < hurt.hp / hurt.maxHp)) hurt = o;
+    if (hurt) { hurt.hp = Math.min(hurt.maxHp, hurt.hp + hurt.maxHp * ADAPT.mend.rate * dt); if (Math.random() < dt * 3) burst(b, hurt.x, hurt.y - 30, 2, "#9fe08a", 0.6, 40, 3, -60); }
+  }
   if (engaged) t.charge = Math.min(1, t.charge + dt / SUPER.fill);
+  if (t.kind === "mage" && b.level.loc >= ADAPT.aegis.fromLoc) {
+    // Aegis Link: the obelisk shields its weakest neighbour against the next heavy blow
+    t.aegisCd -= dt;
+    if (t.aegisCd <= 0) {
+      let weak: Tower | null = null;
+      for (const o of b.towers) if (o !== t && o.alive && !o.building && o.aegis <= 0 && Math.hypot(o.x - t.x, o.y - t.y) < ADAPT.aegis.radius && (!weak || o.hp / o.maxHp < weak.hp / weak.maxHp)) weak = o;
+      t.aegisCd = weak ? ADAPT.aegis.every : 3;
+      if (weak) { weak.aegis = 1; b.beams.push({ x1: t.x, y1: t.y - 48, x2: weak.x, y2: weak.y - 30, life: 0.5, color: "#9fd8ff", jag: true }); text(b, weak.x, weak.y - 70, "Оберег", "#9fd8ff"); }
+    }
+  }
   if (t.kind === "bell") {
     for (const o of b.towers) if (o.alive && !o.building && Math.hypot(o.x - t.x, o.y - t.y) < range) o.hp = Math.min(o.maxHp, o.hp + 18 * sc.dmg * dt);
     if (t.cd <= 0) { t.cd = 2; b.beams.push({ x1: t.x, y1: t.y - 40, x2: t.x, y2: t.y - 40, life: 0.6, color: "#ffe9a0", jag: false }); if (b.units.some((u) => u.stealthT > 0 && Math.hypot(u.x - t.x, u.y - t.y) < range)) sfx.bell(); }
@@ -547,33 +693,41 @@ function towerTick(b: Battle, t: Tower, dt: number) {
   }
   let target: Unit | null = null; let decoy: Unit | null = null;
   // towers hold their current target while it stays in range: a tank in front shields the fragile behind it
-  const held = t.aim && !t.aim.dead && t.aim.hp > 0 && canSee(b, t.aim) && Math.hypot(t.aim.x - t.x, t.aim.y - t.y) <= range && !(t.kind === "flame" && MONSTERS[t.aim.kind].flying) ? t.aim : null;
+  const held = t.aim && !t.aim.dead && t.aim.hp > 0 && !doomed(b, t.aim) && canSee(b, t.aim) && inReach(t, t.aim, range) && !(t.kind === "flame" && MONSTERS[t.aim.kind].flying && !MONSTERS[t.aim.kind].fireBreath) ? t.aim : null;
   for (const u of b.units) {
-    if (u.dead || !canSee(b, u) || Math.hypot(u.x - t.x, u.y - t.y) > range) continue;
-    if (t.kind === "flame" && MONSTERS[u.kind].flying) continue;
-    if (MONSTERS[u.kind].decoy && !b.ai.modes.has("nodecoy") && (!decoy || unitProgress(b, u) > unitProgress(b, decoy))) decoy = u;
+    if (u.dead || !canSee(b, u) || !inReach(t, u, range)) continue;
+    if (t.kind === "flame" && MONSTERS[u.kind].flying && !MONSTERS[u.kind].fireBreath) continue;
+    if (MONSTERS[u.kind].decoy && !b.ai.modes.has("nodecoy") && !doomed(b, u) && (!decoy || unitProgress(b, u) > unitProgress(b, decoy))) decoy = u;
     if (def.focus === "weak") { if (!target || u.hp < target.hp) target = u; }
     else if (!target || threatScore(b, t, u) > threatScore(b, t, target)) target = u;
   }
   if (decoy) target = decoy; else if (held && def.focus !== "weak") target = held;
+  if (t.aim && t.aim !== target && !t.aim.dead && t.aim.hp > 0 && doomed(b, t.aim)) b.feats.overkill++;
+  // Overwatch: a free ballista/frost spire leaves a tank already under fire to others and snipes the support behind it
+  if (!decoy && target && (t.kind === "ballista" || t.kind === "frost") && isTank(target.kind) && b.towers.filter((o) => o !== t && o.alive && o.aim === target).length >= ADAPT.backline.watchers) {
+    let back: Unit | null = null;
+    for (const u of b.units) if (!u.dead && !u.minion && isSupport(u.kind) && canSee(b, u) && inReach(t, u, range) && !doomed(b, u) && (!back || unitProgress(b, u) > unitProgress(b, back))) back = u;
+    if (back) { if (t.aim !== back) { b.feats.backline++; text(b, back.x, back.y - 44, "В ТЫЛ!", "#ff9a5a"); } target = back; }
+  }
   t.aim = target;
   if (!target) return;
   t.angle = Math.atan2(target.y - t.y, target.x - t.x);
   if (t.cd > 0) return;
-  t.cd = def.rate * sc.rate;
+  t.cd = def.rate * sc.rate * (b.stance === "panic" ? ADAPT.panicRate : 1) * (t.rageT > 0 ? ADAPT.rage.rate : 1);
   const sy = t.y - 34;
-  if (miss(b)) { if (Math.random() < 0.3) text(b, target.x, target.y - 20, "мимо", "#888"); return; }
-  if (t.kind === "archer") { b.projs.push({ kind: "arrow", x: t.x, y: sy, sx: t.x, sy, tx: target.x, ty: target.y, t: 0, dur: 0.3, target, dmg, splash: b.ai.modes.has("splash") ? ADAPT.splash.radius : 0, lvl: t.lvl }); sfx.arrow(); }
+  if (t.kind === "cannon" || t.kind === "ballista") crossfire(b, t, target);
+  if (miss(b) || (b.stance === "panic" && Math.random() < ADAPT.panicMiss)) { if (Math.random() < 0.3) text(b, target.x, target.y - 20, "мимо", "#888"); return; }
+  if (t.kind === "archer") { b.projs.push({ kind: "arrow", x: t.x, y: sy, sx: t.x, sy, tx: target.x, ty: target.y, t: 0, dur: 0.3, target, dmg, splash: b.ai.modes.has("splash") ? ADAPT.splash.radius : 0, lvl: t.lvl, from: t }); sfx.arrow(); }
   else if (t.kind === "cannon") {
     const lead = MONSTERS[target.kind].flying ? [target.x, target.y] : b.path.posAt(target.d + target.speed * 0.7);
     const tx = target.atGate ? target.x : lead[0]!, ty = target.atGate ? target.y : lead[1]! + target.lane;
-    b.projs.push({ kind: "ball", x: t.x, y: sy, sx: t.x, sy, tx, ty, t: 0, dur: 0.8, target: null, dmg, splash: (def.splash ?? 50) * sc.range, lvl: t.lvl });
+    b.projs.push({ kind: "ball", x: t.x, y: sy, sx: t.x, sy, tx, ty, t: 0, dur: 0.8, target: null, dmg, splash: (def.splash ?? 50) * sc.range, lvl: t.lvl, from: t });
     burst(b, t.x + Math.cos(t.angle) * 20, sy, 10, "#ccc", 0.6, 50, 5, -20); sfx.cannon(); b.shake = Math.max(b.shake, 1.5);
   } else if (t.kind === "mage") {
     let cur: Unit | null = target; let x1 = t.x, y1 = t.y - 48; const hit = new Set<Unit>(); const chain = t.lvl >= 3 ? 3 : 2;
     for (let i = 0; i < chain && cur; i++) {
       b.beams.push({ x1, y1, x2: cur.x, y2: cur.y, life: 0.25, color: "#9fe6ff", jag: true });
-      hurtUnit(b, cur, dmg * (i ? 0.6 : 1)); cur.slowT = 1.6; hit.add(cur); burst(b, cur.x, cur.y, 6, "#7fe0ff", 0.4, 90, 2);
+      hurtUnit(b, cur, dmg * (i ? 0.6 : 1), null, t); cur.slowT = 1.6; hit.add(cur); burst(b, cur.x, cur.y, 6, "#7fe0ff", 0.4, 90, 2);
       x1 = cur.x; y1 = cur.y; const from: Unit = cur;
       cur = b.units.find((u) => !hit.has(u) && !u.dead && canSee(b, u) && Math.hypot(u.x - from.x, u.y - from.y) < 75) ?? null;
     }
@@ -581,29 +735,63 @@ function towerTick(b: Battle, t: Tower, dt: number) {
   } else if (t.kind === "frost") {
     t.shots++;
     b.beams.push({ x1: t.x, y1: t.y - 50, x2: target.x, y2: target.y, life: 0.2, color: "#d8f6ff", jag: false });
-    hurtUnit(b, target, dmg); target.slowT = 2.2; burst(b, target.x, target.y, 8, "#d8f6ff", 0.5, 70, 2);
+    hurtUnit(b, target, dmg, null, t); target.slowT = 2.2; burst(b, target.x, target.y, 8, "#d8f6ff", 0.5, 70, 2);
     if (t.shots % 3 === 0 && !MONSTERS[target.kind].flying) { target.stunT = Math.max(target.stunT, 0.8 + 0.1 * t.lvl); burst(b, target.x, target.y - 8, 16, "#bff3ff", 0.7, 60, 3); }
     sfx.frost();
   } else if (t.kind === "censer") {
     const tx = target.x, ty = target.y, rad = (def.splash ?? 70) * sc.range;
     burst(b, tx, ty, 26, "#7fd040", 1.2, rad, 6, -15); ring(b, tx, ty, "#8fe04a", 0.4);
-    for (const u of b.units) if (!u.dead && Math.hypot(u.x - tx, u.y - ty) < rad) { u.poisonT = 3.5; u.poisonDps = Math.max(u.poisonDps, dmg); }
+    for (const u of b.units) if (!u.dead && Math.hypot(u.x - tx, u.y - ty) < rad) { u.poisonT = 3.5; u.poisonDps = Math.max(u.poisonDps, dmg); u.poisonBy = t; }
     sfx.censer();
   } else if (t.kind === "ballista") {
     const ex = t.x + Math.cos(t.angle) * range * 1.2, ey = t.y + Math.sin(t.angle) * range * 1.2;
     b.beams.push({ x1: t.x, y1: sy, x2: ex, y2: ey, life: 0.15, color: "#e8d8b0", jag: false });
     for (const u of b.units) {
       const dx = ex - t.x, dy = ey - t.y, L2 = dx * dx + dy * dy; const k = Math.max(0, Math.min(1, ((u.x - t.x) * dx + (u.y - t.y) * dy) / L2));
-      if (Math.hypot(u.x - t.x - dx * k, u.y - t.y - dy * k) < 16 && canSee(b, u)) hurtUnit(b, u, dmg, "arrow");
+      if (Math.hypot(u.x - t.x - dx * k, u.y - t.y - dy * k) < 16 && canSee(b, u)) hurtUnit(b, u, dmg, "arrow", t);
     }
     sfx.bolt();
   } else if (t.kind === "flame") {
-    for (const u of b.units) if (!u.dead && canSee(b, u) && Math.hypot(u.x - t.x, u.y - t.y) < range && !MONSTERS[u.kind].flying) { hurtUnit(b, u, dmg); if (t.lvl >= 2) { u.burnT = 1; u.burnDps = dmg; } }
+    for (const u of b.units) if (!u.dead && canSee(b, u) && Math.hypot(u.x - t.x, u.y - t.y) < range && !MONSTERS[u.kind].flying) { hurtUnit(b, u, dmg, null, t); if (t.lvl >= 2) { u.burnT = 1; u.burnDps = dmg; u.burnBy = t; } }
     for (let i = 0; i < 4; i++) { const a = t.angle + (Math.random() - 0.5) * 0.6, v = 200 + Math.random() * 100; b.parts.push({ x: t.x, y: sy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: range / v, max: range / v, size: 7, color: Math.random() < 0.5 ? "#ff6a1a" : "#ffc040", grav: -40 }); }
     sfx.flame();
   }
 }
 
+/** Focus Crossfire: a second heavy gun on the same target fires with this one; the joint volley stops lifesteal for a while. */
+function crossfire(b: Battle, t: Tower, target: Unit) {
+  const mate = b.towers.find((o) => o !== t && o.alive && (o.kind === "cannon" || o.kind === "ballista") && o.aim === target && o.cd > 0 && o.cd < ADAPT.cross.sync && o.frozenT <= 0 && o.blindT <= 0 && !o.disabled);
+  if (!mate) return;
+  mate.cd = 0; target.nolsT = ADAPT.cross.noLifesteal;
+  if (target.crossT <= 0) { target.crossT = ADAPT.cross.cd; b.feats.cross++; text(b, target.x, target.y - 56, "ПЕРЕКРЁСТНЫЙ ЗАЛП", "#ffb070"); ring(b, target.x, target.y, "#ffb070", 0.4); }
+}
+/** Tar traps: the garrison pours tar ahead of the horde; a nearby flame altar sets it ablaze. */
+function tarTraps(b: Battle, dt: number, alive: Unit[]) {
+  const T = ADAPT.tar;
+  if (b.level.loc >= T.fromLoc) {
+    b.tarCd -= dt;
+    const walkers = alive.filter((u) => !MONSTERS[u.kind].flying && !u.atGate);
+    if (b.tarCd <= 0 && walkers.length) {
+      b.tarCd = T.every; const front = walkers.reduce((a, c) => (c.d > a.d ? c : a));
+      const d = Math.min(b.path.len - 120, front.d + 90); const [x, y] = b.path.posAt(d);
+      b.tars.push({ x, y, d, t: T.life, fire: 0 }); text(b, x, y - 30, "СМОЛА!", "#c8a070"); burst(b, x, y, 14, "#3a2a18", 0.6, 60, 5, 120);
+    }
+  }
+  for (const tr of b.tars) {
+    tr.t -= dt;
+    if (tr.fire > 0) tr.fire -= dt;
+    else if (b.towers.some((t) => t.alive && t.kind === "flame" && !t.disabled && Math.hypot(t.x - tr.x, t.y - tr.y) < TOWERS.flame.range * towerScale(t.lvl).range * T.ignite)) {
+      tr.fire = T.fire; tr.t = Math.min(tr.t, T.fire); text(b, tr.x, tr.y - 34, "СМОЛА ГОРИТ!", "#ff7a3d"); burst(b, tr.x, tr.y, 30, "#ff6a1a", 0.8, 120, 6, -80);
+    }
+    for (const u of alive) if (!MONSTERS[u.kind].flying && Math.hypot(u.x - tr.x, u.y - tr.y) < T.radius) {
+      if (u.tarT <= 0) b.feats.tar++;
+      u.tarT = 0.2;
+      if (tr.fire > 0) { u.burnT = Math.max(u.burnT, 0.5); u.burnDps = Math.max(u.burnDps, T.burn * b.level.towerMul); }
+    }
+    if (tr.fire > 0 && Math.random() < dt * 14) burst(b, tr.x + (Math.random() - 0.5) * 60, tr.y, 1, Math.random() < 0.5 ? "#ff6a1a" : "#ffc040", 0.5, 30, 6, -90);
+  }
+  b.tars = b.tars.filter((tr) => tr.t > 0);
+}
 function fireSuper(b: Battle, t: Tower, range: number, dmg: number) {
   const inRange = b.units.filter((u) => !u.dead && Math.hypot(u.x - t.x, u.y - t.y) < range * 1.2);
   const front = inRange.sort((a, c) => unitProgress(b, c) - unitProgress(b, a))[0];
@@ -718,6 +906,16 @@ function boilingOil(b: Battle, dt: number) {
   b.oilCd -= dt; b.oilT = Math.max(0, b.oilT - dt);
   const near = b.units.filter((u) => !u.dead && !MONSTERS[u.kind].flying && GATE.x - u.x < 80 && Math.abs(u.y - GATE.y) < 60);
   if (b.oilCd <= 0 && near.length && b.gateHp > 0) { b.oilCd = 4; b.oilT = 1.2; sfx.oil(); }
+  // stones from the parapet: a shadow telegraphs the drop, then area damage under the gate
+  b.stoneCd -= dt; const S = ADAPT.stones;
+  if (!b.stone && b.stoneCd <= 0 && near.length && b.gateHp > 0) {
+    const u = near[Math.floor(Math.random() * near.length)]!; b.stone = { x: u.x, y: u.y, t: S.warn };
+    b.stoneCd = S.min + Math.random() * (S.max - S.min); text(b, GATE.x - 90, GATE.y - 120, "КАМНИ СО СТЕН!", "#c8b89a");
+  }
+  if (b.stone && (b.stone.t -= dt) <= 0) {
+    const st = b.stone; b.stone = null; b.shake = Math.max(b.shake, 5); explosion(b, st.x, st.y, 0.8, "#c8b89a"); decal(b, st.x, st.y, "crater", 22); sfx.explosion();
+    for (const u of b.units) if (!u.dead && !MONSTERS[u.kind].flying && Math.hypot(u.x - st.x, u.y - st.y) < S.radius) { hurtUnit(b, u, S.dmg * b.level.towerMul, "blast"); b.feats.stones++; }
+  }
   if (b.oilT > 0) for (const u of near) { u.hp -= 18 * b.level.towerMul * dt; if (Math.random() < dt * 6) burst(b, u.x, u.y - 12, 1, "#ffb040", 0.5, 30, 3, -40); }
 }
 

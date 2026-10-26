@@ -18,7 +18,7 @@ export const LOCATIONS: LocationDef[] = [
   { id: 2, name: "Гнилые топи", theme: "swamp", blurb: "Болота и светящиеся грибы. Курильницы травят ядом.", newTower: "censer", cx: 1180, cy: 1000, puzzle: { mode: "splash", name: "Ядовитая картечь", hint: "Бьёт по площади — стаи и толпы тают, берите крепких." } },
   { id: 3, name: "Призрачный лес", theme: "forest", blurb: "Светлячки и шёпот. Святые колокола видят невидимых.", newTower: "bell", cx: 1520, cy: 420, puzzle: { mode: "reveal", name: "Святой свет", hint: "Невидимость не работает — давите силой и щитами." } },
   { id: 4, name: "Пылающая кузня", theme: "forge", blurb: "Лава и пепел. Огненные алтари жгут всё живое.", newTower: "flame", cx: 1880, cy: 1000, puzzle: { mode: "air", name: "Зенитный огонь", hint: "Летуны получают сильный урон — идите по земле." } },
-  { id: 5, name: "Стены столицы", theme: "capital", blurb: "Мостовые и знамёна. Осадные баллисты у последних ворот.", newTower: "ballista", cx: 2130, cy: 380, puzzle: { mode: "pierce", name: "Королевская артиллерия", hint: "Броня пробивается, а гарнизон огромен — нужна сила и синергии." } },
+  { id: 5, name: "Стены столицы", theme: "capital", blurb: "Мостовые и знамёна. Осадные баллисты у последних ворот.", newTower: "ballista", cx: 2000, cy: 380, puzzle: { mode: "pierce", name: "Королевская артиллерия", hint: "Броня пробивается, а гарнизон огромен — нужна сила и синергии." } },
 ];
 
 /** Towers available in a location: base three plus everything introduced so far. */

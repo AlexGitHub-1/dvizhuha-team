@@ -8,12 +8,22 @@ const TAU = Math.PI * 2;
 function rng(seed: number) { return () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }; }
 
 /** Level node positions: four per location on a small arc around the region centre. */
-export const NODES: { x: number; y: number }[] = LEVELS.map((l) => {
-  const loc = LOCATIONS[l.loc]!; const j = (l.id - 1) % 4;
-  const dir = l.loc % 2 ? 1 : -1;
-  const a = -2.4 + j * 0.85;
-  return { x: loc.cx + Math.cos(a) * 200 + (j - 1.5) * 40, y: loc.cy + Math.sin(a) * 120 * dir + (j - 1.5) * -40 * dir };
-});
+export const NODE_MIN_GAP = 100;
+export const NODES: { x: number; y: number }[] = (() => {
+  const ns = LEVELS.map((l) => {
+    const loc = LOCATIONS[l.loc]!; const j = (l.id - 1) % 4;
+    const dir = l.loc % 2 ? 1 : -1;
+    const a = -2.4 + j * 0.85;
+    return { x: loc.cx + Math.cos(a) * 200 + (j - 1.5) * 40, y: loc.cy + Math.sin(a) * 120 * dir + (j - 1.5) * -40 * dir };
+  });
+  // nodes of neighbouring regions can land on each other: push overlapping pairs apart
+  for (let it = 0; it < 40; it++) for (let i = 0; i < ns.length; i++) for (let k = i + 1; k < ns.length; k++) {
+    const a = ns[i]!, b = ns[k]!; const dx = b.x - a.x, dy = b.y - a.y; const d = Math.hypot(dx, dy) || 1;
+    if (d < NODE_MIN_GAP + 10) { const push = (NODE_MIN_GAP + 10 - d) / 2; a.x -= dx / d * push; a.y -= dy / d * push; b.x += dx / d * push; b.y += dy / d * push; }
+  }
+  for (const n of ns) { n.x = Math.max(70, Math.min(WORLD_W - 70, n.x)); n.y = Math.max(70, Math.min(WORLD_H - 70, n.y)); }
+  return ns;
+})();
 
 /** Smooth road samples through all nodes. */
 export const ROAD: { x: number; y: number; node: number }[] = (() => {

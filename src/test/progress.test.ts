@@ -7,9 +7,9 @@ const MONSTERS_RARITY = (id: keyof typeof MONSTERS) => MONSTERS[id].rarity;
 const L1 = LEVELS[0]!;
 
 describe("monster upgrades", () => {
-  it("each level adds 12% hp", () => {
-    expect(monsterStats("troll", 1).hp).toBe(700);
-    expect(monsterStats("troll", 2).hp).toBe(784);
+  it("each level adds 9% hp for commons (troll 380)", () => {
+    expect(monsterStats("troll", 1).hp).toBe(380);
+    expect(monsterStats("troll", 2).hp).toBe(Math.round(380 * 1.09));
   });
   it("shards give 10% discount each, max 5", () => {
     expect(upgradeCost("common", 1, 0)).toBe(50);
@@ -38,13 +38,13 @@ describe("cases", () => {
     expect(rollRarity({ common: 70, rare: 30 }, 0.69)).toBe("common");
     expect(rollRarity({ common: 70, rare: 30 }, 0.71)).toBe("rare");
   });
-  it("costs 220 gold for the rusty chest and duplicates become shards", () => {
-    const p = { ...defaultProgress(), gold: 220 };
+  it("costs 180 gold for the rusty chest and duplicates become shards", () => {
+    const p = { ...defaultProgress(), gold: 180 };
     const r = openCase(p, "rusty", () => 0)!; // common, first in pool = goblin (owned)
     expect(r.p.gold).toBe(0);
     expect(r.result.isNew).toBe(false);
-    expect(r.p.owned.goblin!.shards).toBe(2);
-    expect(openCase({ ...p, gold: 219 }, "rusty")).toBeNull();
+    expect(r.p.owned.goblin!.shards).toBe(3);
+    expect(openCase({ ...p, gold: 179 }, "rusty")).toBeNull();
   });
 });
 
@@ -65,7 +65,7 @@ describe("economy v2", () => {
   it("first win pays 1.2x level gold, repeat wins 0.5x", () => {
     const win = { won: true, gateFrac: 1, towersDown: 0, timeLeftFrac: 0.6 };
     expect(battleReward(L1, 0, win).gold).toBe(149);
-    expect(battleReward(L1, 3, win).gold).toBe(55);
+    expect(battleReward(L1, 3, win).gold).toBe(35);
   });
   it("upgrades from level 5 need shards and are 20% cheaper", () => {
     expect(shardsRequired(4)).toBe(0); expect(shardsRequired(5)).toBe(1); expect(shardsRequired(7)).toBe(1); expect(shardsRequired(9)).toBe(2);
@@ -188,8 +188,8 @@ describe("squad of five", () => {
 
 describe("bomber stats", () => {
   it("sapper shows blast damage that grows with level", () => {
-    expect(monsterStats("sapper", 1).blast).toBe(230);
-    expect(monsterStats("sapper", 2).blast).toBeGreaterThan(230);
+    expect(monsterStats("sapper", 1).blast).toBe(200);
+    expect(monsterStats("sapper", 2).blast).toBeGreaterThan(200);
     expect(monsterStats("goblin", 1).blast).toBe(0);
   });
 });
@@ -207,7 +207,7 @@ describe("defeat tip", () => {
 import { abilityText as _abilityText } from "@/game/meta/progress";
 describe("abilityText", () => {
   it("golem freezes towers for 2 s every 2.5 s at level 1", () => { expect(_abilityText("golem", 1)).toContain("Замораживает башню на 2 с каждые 2.5 с"); });
-  it("shaman heals 7 HP/s in radius 95", () => { expect(_abilityText("shaman", 1)[0]).toBe("Лечит союзников на 7 HP/с и ускоряет ×1.3 в радиусе 95"); });
+  it("shaman heals 10 HP/s in radius 110", () => { expect(_abilityText("shaman", 1)[0]).toBe("Лечит союзников на 10 HP/с и ускоряет ×1.3 в радиусе 110"); });
   it("ability strength grows at level 5", () => { expect(_abilityText("golem", 5)).toContain("Замораживает башню на 2.5 с каждые 2.5 с"); });
 });
 

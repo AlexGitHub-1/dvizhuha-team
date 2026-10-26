@@ -1,3 +1,6 @@
+import { SettingsPanel } from "@/components/ui-kit/SettingsPanel";
+import { getSettings, useSettings } from "@/game/meta/settings";
+import { achBattle } from "@/game/meta/achievements";
 import { MercyBadge } from "@/components/ui-kit/MercyBadge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -6,17 +9,18 @@ import { SpellMedallion } from "@/components/ui-kit/SpellMedallion";
 import { cn } from "@/lib/utils";
 import { Currency, GameButton, gameButton, Modal, MonsterPortrait, Panel, RARITY_BORDER, StatBar, useCountUp } from "@/components/ui-kit";
 import { recLabel, type LevelDef } from "@/game/data/levels";
+import { TOWERS } from "@/game/data/towers";
 import { MONSTERS, type MonsterId } from "@/game/data/monsters";
 import { SPELLS, type SpellId } from "@/game/data/shop";
 import { CHARS } from "@/game/data/story";
-import { ADAPT_NAME, canSummon, castSpell, createBattle, requestSummon, H, MAX_ESSENCE, outcome, summon, summonCost, update, W, type Battle } from "@/game/engine/battle";
+import { ADAPT, ADAPT_NAME, WAVE, launchWave, waveCost, canSummon, castSpell, createBattle, requestSummon, H, MAX_ESSENCE, outcome, summon, summonCost, update, W, type Battle } from "@/game/engine/battle";
 import { FightReport } from "./FightReport";
 import { Tutorial } from "@/components/ui-kit/Tutorial";
 import { renderBattle, towerAt, type Aim } from "@/game/render/battle";
 import { SYNERGIES } from "@/game/data/synergies";
-import { applyBattle, defeatTip, squadUpgradeReady, type BattleMods, requiredPower, squadPower } from "@/game/meta/progress";
+import { applyBattle, defeatBreakdown, defeatTip, squadUpgradeReady, type BattleMods, requiredPower, squadPower } from "@/game/meta/progress";
 import { getProgress, setProgress, useProgress } from "@/game/meta/store";
-import { setIntensity, startScene, stopScene, unlockAudio, sfx } from "@/game/audio";
+import { resumeAmbient, setIntensity, startScene, stopScene, unlockAudio, sfx } from "@/game/audio";
 
 function toggleFullscreen() {
   if (document.fullscreenElement) void document.exitFullscreen();
@@ -38,13 +42,22 @@ export function BattleView({ level, squad, spell, mods, onRetry }: { level: Leve
   const [tut, setTut] = useState(false);
   const onTut = useCallback((on: boolean) => setTut(on), []);
   const pausedRef = useRef(false); pausedRef.current = paused || tut;
+  const st = useSettings(); const [showSet, setShowSet] = useState(false);
   const speed = p.speed ?? 1; const speedRef = useRef(1); speedRef.current = speed;
   const toggleSpeed = useCallback(() => { sfx.speed(); setProgress((x) => ({ ...x, speed: (x.speed ?? 1) === 2 ? 1 : 2 })); }, []);
 
-  const doSummon = useCallback((i: number) => { const b = bRef.current!; if (!pausedRef.current) requestSummon(b, i); }, []);
+  const [pick, setPick] = useState<number[] | null>(null); const pickRef = useRef<number[] | null>(null); pickRef.current = pick;
+  const doSummon = useCallback((i: number) => {
+    const b = bRef.current!; if (pausedRef.current) return;
+    const pk = pickRef.current; if (pk) { setPick(pk.includes(i) ? pk.filter((x) => x !== i) : pk.length < WAVE.max ? [...pk, i] : pk); return; }
+    requestSummon(b, i);
+  }, []);
+  const toggleWave = () => { const b = bRef.current!; if (pick) { if (pick.length) { launchWave(b, pick); sfx.speed(); } setPick(null); } else if (b.wave.length) launchWave(b, []); else setPick([]); };
   /** summon slots held down (button or key) — summoned again as soon as possible */
   const held = useRef(new Set<number>());
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
+  /** pointer is over a summon button: show which towers cover the entry and the front line */
+  const dangerRef = useRef(false);
   const [overTower, setOverTower] = useState(false);
   const aimRef = useRef<Aim | null>(null);
   const [aiming, setAiming] = useState(false);
@@ -63,7 +76,7 @@ export function BattleView({ level, squad, spell, mods, onRetry }: { level: Leve
     if (castSpell(bRef.current!, p.x, p.y)) { setAiming(false); aimRef.current = null; }
   };
 
-  useEffect(() => { unlockAudio(); startScene(bRef.current!.theme, true); return () => { stopScene(); setIntensity(0); }; }, []);
+  useEffect(() => { unlockAudio(); startScene(bRef.current!.theme, true); return () => { stopScene(); setIntensity(0); resumeAmbient(); }; }, []);
 
   useEffect(() => {
     unlockAudio();
@@ -99,14 +112,23 @@ export function BattleView({ level, squad, spell, mods, onRetry }: { level: Leve
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       const b = bRef.current!;
+      if (!getSettings().hitStop) b.hitStop = 0;
       if (!pausedRef.current && b.hitStop > 0) b.hitStop -= dt;
-      else if (!pausedRef.current) { for (const i of held.current) if (canSummon(b, i)) summon(b, i); for (let k = 0; k < speedRef.current; k++) { update(b, dt); if (b.result) break; } }
+      else if (!pausedRef.current) {
+        // final-blow slow motion: 3x slower for a moment (off together with the hit-stop setting)
+        let gdt = dt; if (b.slowMo > 0) { if (getSettings().hitStop) gdt = dt / ADAPT.slowMo.k; b.slowMo = Math.max(0, b.slowMo - dt); }
+        for (const i of held.current) if (canSummon(b, i)) summon(b, i); for (let k = 0; k < speedRef.current; k++) { update(b, gdt); if (b.result) break; }
+      }
       setIntensity(1 - b.gateHp / b.gateMax);
-      const ctx = canvasRef.current?.getContext("2d"); if (ctx) { try { renderBattle(ctx, b, aimRef.current, hoverRef.current); } catch (err) { ctx.reset?.(); console.error(err); } }
+      const ctx = canvasRef.current?.getContext("2d"); if (ctx) { try { renderBattle(ctx, b, aimRef.current, hoverRef.current, dangerRef.current); } catch (err) { ctx.reset?.(); console.error(err); } }
       if (b.result && !done) {
         done = true;
         setTimeout(() => {
-          const r = applyBattle(getProgress(), level, outcome(b)); setProgress(r.p); sfx.coins();
+          const before = getProgress(); const o = outcome(b); const r = applyBattle(before, level, o);
+          setProgress(achBattle(r.p, { won: o.won, gateLeftFrac: Math.max(0, b.gateHp) / b.gateMax, summoned: b.stats.summoned, timeLeftSec: Math.max(0, level.timeLimit - b.time),
+            towersDown: b.stats.towersDown, essenceFull: b.essence >= MAX_ESSENCE - 1, squadLvls: b.squad.map((s) => s.lvl), goblins: b.fight.goblin?.summoned ?? 0,
+            silent: before.muted && before.musicMuted, hour: new Date().getHours(), prevStars: before.stars[level.id] ?? 0, stars: r.reward.stars,
+            streakBefore: before.losses?.[level.id] ?? 0, power: squadPower(before), required: requiredPower(level.id) })); sfx.coins();
           setReward({ won: b.result === "won", r: r.reward });
         }, 1500);
       }
@@ -149,7 +171,7 @@ export function BattleView({ level, squad, spell, mods, onRetry }: { level: Leve
         </div>
       </header>
       <div ref={wrapRef} data-tut="field" className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"><canvas ref={canvasRef} onPointerMove={onMove} onPointerLeave={() => { hoverRef.current = null; setOverTower(false); }} onPointerDown={onClick} className={cn("absolute inset-0", aiming ? "cursor-crosshair" : overTower && "cursor-help")} />
-        {speed === 2 && !b.result && <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 70px color-mix(in oklab, var(--gold) 22%, transparent)" }}><div className="absolute inset-y-0 left-0 w-24 animate-speed-lines bg-[repeating-linear-gradient(0deg,transparent_0_18px,color-mix(in_oklab,var(--gold)_18%,transparent)_18px_20px)] opacity-50 [mask-image:linear-gradient(90deg,black,transparent)]" /><div className="absolute inset-y-0 right-0 w-24 animate-speed-lines bg-[repeating-linear-gradient(0deg,transparent_0_18px,color-mix(in_oklab,var(--gold)_18%,transparent)_18px_20px)] opacity-50 [mask-image:linear-gradient(270deg,black,transparent)]" /></div>}
+        {speed === 2 && !b.result && st.speedFx && <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 70px color-mix(in oklab, var(--gold) 22%, transparent)" }}><div className="absolute inset-y-0 left-0 w-24 animate-speed-lines bg-[repeating-linear-gradient(0deg,transparent_0_18px,color-mix(in_oklab,var(--gold)_18%,transparent)_18px_20px)] opacity-50 [mask-image:linear-gradient(90deg,black,transparent)]" /><div className="absolute inset-y-0 right-0 w-24 animate-speed-lines bg-[repeating-linear-gradient(0deg,transparent_0_18px,color-mix(in_oklab,var(--gold)_18%,transparent)_18px_20px)] opacity-50 [mask-image:linear-gradient(270deg,black,transparent)]" /></div>}
         {final && <>
           <div className="pointer-events-none absolute inset-0 animate-soft-pulse" style={{ boxShadow: `inset 0 0 ${80 + (10 - left) * 14}px color-mix(in oklab, var(--blood) ${40 + (10 - left) * 5}%, transparent)` }} />
           <div key={Math.ceil(left)} className="pointer-events-none absolute inset-0 flex items-center justify-center"><span className="animate-pop-in font-display text-[12rem] leading-none text-blood opacity-25 drop-shadow-[0_0_30px_var(--blood)]">{Math.ceil(left)}</span></div>
@@ -175,10 +197,12 @@ export function BattleView({ level, squad, spell, mods, onRetry }: { level: Leve
           return (
             <button key={s.kind} title="Удерживай для автопризыва"
               onClick={(e) => { if (e.detail === 0) doSummon(i); }}
-              onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); doSummon(i); held.current.add(i); }}
-              onPointerUp={() => held.current.delete(i)} onPointerCancel={() => held.current.delete(i)} onLostPointerCapture={() => held.current.delete(i)}
+              onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); doSummon(i); if (!pickRef.current) held.current.add(i); }}
+              onPointerEnter={() => { dangerRef.current = true; }} onPointerLeave={() => { dangerRef.current = false; }}
+              onPointerUp={() => { held.current.delete(i); }} onPointerCancel={() => held.current.delete(i)} onLostPointerCapture={() => held.current.delete(i)}
               className={cn("group relative flex w-24 flex-col items-center overflow-hidden rounded-xl border-2 bg-secondary pb-1.5 pt-2 transition", RARITY_BORDER[def.rarity],
-                ok ? "-translate-y-1 shadow-[var(--shadow-glow)] hover:-translate-y-1.5" : b.queue === i ? "animate-soft-pulse border-gold" : "opacity-55 grayscale-[0.6]")}>
+                pick?.includes(i) || b.wave.includes(i) ? "-translate-y-1 border-blood shadow-[var(--shadow-glow)]" : pick ? "opacity-90" : ok ? "-translate-y-1 shadow-[var(--shadow-glow)] hover:-translate-y-1.5" : b.queue === i ? "animate-soft-pulse border-gold" : "opacity-55 grayscale-[0.6]")}>
+              {(pick?.includes(i) || b.wave.includes(i)) && <span className="absolute inset-x-0 bottom-0 z-30 bg-blood/90 py-px text-center font-display text-[10px] uppercase text-foreground">Волна {(pick ?? b.wave).indexOf(i) + 1}</span>}
               {b.queue === i && <span className="absolute inset-x-0 bottom-0 z-20 bg-gold/90 py-px text-center font-display text-[10px] uppercase text-background">В очереди</span>}
               <kbd className="absolute left-1 top-1 z-20 rounded-md border border-gold/60 bg-background px-1.5 font-display text-[11px] text-gold">{i + 1}</kbd>
               <span className="absolute right-1 top-1 z-20 text-[10px] font-bold text-gold">Ур.{s.lvl}</span>
@@ -193,15 +217,26 @@ export function BattleView({ level, squad, spell, mods, onRetry }: { level: Leve
           );
         })}
         </div>
+        <button data-tut="wave" onClick={toggleWave} title="Выбери до трёх бойцов — они выйдут вместе, когда хватит эссенции"
+          className={cn("flex h-[118px] w-20 flex-col items-center justify-center gap-1 rounded-xl border-2 px-1 text-center font-display uppercase transition",
+            pick ? "animate-soft-pulse border-blood bg-blood/20 text-foreground" : b.wave.length ? "border-gold bg-gold/15 text-gold" : "border-border bg-secondary text-muted-foreground hover:border-blood/70 hover:text-foreground")}>
+          <span className="text-2xl">⚔</span>
+          <span className="text-[11px] leading-tight">{pick ? (pick.length ? `В бой ×${pick.length}` : "Выбери бойцов") : b.wave.length ? `Ждём ✦${waveCost(b, b.wave)}` : "Волна"}</span>
+          {!pick && b.wave.length > 0 && <span className="text-[9px] normal-case text-muted-foreground">нажми — отмена</span>}
+        </button>
         <SpellMedallion icon={sp.icon} name={sp.name} cd={b.spellCd} max={sp.cooldown * b.mods.spellCdMul} aiming={aiming} onClick={doSpell} />
       </footer>
 
       <Tutorial id="battle" delay={300} onActive={onTut} />
-      <Modal open={paused && !reward && !tut}>
+      <Modal open={paused && !reward && !tut && showSet}>
+        <Panel title="Настройки"><SettingsPanel compact /><GameButton className="mt-3 w-full" variant="primary" onClick={() => setShowSet(false)}>Назад</GameButton></Panel>
+      </Modal>
+      <Modal open={paused && !reward && !tut && !showSet}>
         <Panel title="Пауза" className="text-center">
           <div className="flex flex-col gap-2">
             <GameButton variant="primary" onClick={() => setPaused(false)}>Продолжить</GameButton>
             <GameButton onClick={onRetry}>Начать заново</GameButton>
+            <GameButton variant="ghost" onClick={() => setShowSet(true)}>⚙ Настройки</GameButton>
             <Link to="/campaign" className={gameButton({ variant: "ghost" })}>Сдаться и выйти</Link>
           </div>
         </Panel>
@@ -234,7 +269,8 @@ function Defeat({ b, level, r, onRetry }: { b: Battle; level: LevelDef; r: Rewar
   const p = useProgress();
   const frac = Math.max(0, b.gateHp / b.gateMax);
   const gold = useCountUp(r.gold, true);
-  const tip = defeatTip(p, { gateFrac: frac, towersDown: b.stats.towersDown, summoned: b.stats.summoned, reached: b.stats.reached, timeOut: b.time >= level.timeLimit });
+  const tip = defeatTip(p, { gateFrac: frac, towersDown: b.stats.towersDown, summoned: b.stats.summoned, reached: b.stats.reached, timeOut: b.time >= level.timeLimit, feats: b.feats, wasted: b.wasted });
+  const bd = defeatBreakdown(b.towers, b.wasted, b.longest);
   const canUp = squadUpgradeReady(p);
   const t = Math.min(b.time, level.timeLimit);
   return (
@@ -263,6 +299,15 @@ function Defeat({ b, level, r, onRetry }: { b: Battle; level: LevelDef; r: Rewar
           {[["⏳", `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`, "в бою"], ["🗼", String(b.stats.towersDown), "башен снесено"], ["👹", String(b.stats.summoned), "призвано"]].map(([i, v, l]) => (
             <div key={l} className="rounded-lg border border-border bg-background/40 p-2"><div className="text-lg">{i}</div><div className="font-display">{v}</div><div className="text-[10px] text-muted-foreground">{l}</div></div>
           ))}
+        </div>
+        <div className="mt-3 rounded-lg border border-blood/40 bg-background/40 p-3 text-left text-sm">
+          <div className="mb-1.5 font-display text-xs uppercase tracking-widest text-blood">Разбор поражения</div>
+          <ul className="space-y-1">
+            {bd.killer && <li>🗼 Главный убийца: <b>{TOWERS[bd.killer.kind].name}</b> — {bd.killer.share}% урона по отряду</li>}
+            <li>✦ Эссенции впустую: <b className={bd.wasted > 0 ? "text-blood" : "text-poison"}>{bd.wasted}</b> <span className="text-muted-foreground">(бойцы погибли, не дойдя до башен)</span></li>
+            {bd.longest && <li>⏳ Дольше всех продержался: <b>{MONSTERS[bd.longest.kind].name}</b> — {Math.round(bd.longest.t)} с</li>}
+            {(b.feats.aegis + b.feats.backline + b.feats.cross + b.feats.stones) > 0 && <li className="text-muted-foreground">Гарнизон: щитов {b.feats.aegis} · выстрелов в тыл {b.feats.backline} · сдвоенных залпов {b.feats.cross} · попаданий камнями {b.feats.stones}</li>}
+          </ul>
         </div>
         <FightReport b={b} />
         {(() => { const rec = requiredPower(level.id); const avg = squadPower(p); return (

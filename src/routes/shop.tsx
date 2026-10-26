@@ -1,3 +1,5 @@
+import { achCase } from "@/game/meta/achievements";
+import { MONSTERS } from "@/game/data/monsters";
 import { sfx } from "@/game/audio";
 import { Tutorial } from "@/components/ui-kit/Tutorial";
 import { createFileRoute } from "@tanstack/react-router";
@@ -37,7 +39,7 @@ function Shop() {
 
   const buy = (c: CaseDef) => {
     const r = openCase(getProgress(), c.id); if (!r) return; sfx.chest();
-    setProgress(r.p);
+    setProgress(achCase(r.p, r.result.id, MONSTERS[r.result.id].rarity, !r.result.isNew));
     setOpen({ c, res: r.result, key: performance.now() });
   };
   const left = PITY_AT - p.pity;

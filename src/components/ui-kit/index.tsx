@@ -55,8 +55,19 @@ export function StatBar({ value, max, className, tone = "primary" }: { value: nu
   const tones = { primary: "bg-primary", blood: "bg-blood", ice: "bg-ice", gold: "bg-gold", poison: "bg-poison" };
   return <div className={cn("h-2 overflow-hidden rounded-full border border-border bg-muted", className)}><div className={cn("h-full transition-all", tones[tone])} style={{ width: `${Math.max(0, Math.min(1, value / max)) * 100}%` }} /></div>;
 }
+/** SVG currency glyphs: emoji like the coin are missing from many system fonts. */
+export function CurrencyIcon({ kind, className }: { kind: "gold" | "skulls" | "essence"; className?: string }) {
+  const c = cn("inline-block h-[1.05em] w-[1.05em] shrink-0 align-[-0.15em]", className);
+  if (kind === "gold") return (
+    <svg viewBox="0 0 20 20" className={c} aria-hidden><circle cx="10" cy="10" r="9" fill="var(--gold)" /><circle cx="10" cy="10" r="9" fill="none" stroke="currentColor" strokeOpacity=".45" strokeWidth="1.4" /><circle cx="10" cy="10" r="5.6" fill="none" stroke="var(--background)" strokeOpacity=".35" strokeWidth="1.3" /><path d="M6 6.5a5 5 0 0 1 4-2.2" stroke="var(--foreground)" strokeOpacity=".7" strokeWidth="1.3" fill="none" strokeLinecap="round" /></svg>
+  );
+  if (kind === "skulls") return (
+    <svg viewBox="0 0 20 20" className={c} aria-hidden><path d="M10 2C5.6 2 3 5 3 8.6c0 2.2 1 3.6 2.3 4.4V16h9.4v-3c1.3-.8 2.3-2.2 2.3-4.4C17 5 14.4 2 10 2Z" fill="currentColor" /><circle cx="7.2" cy="9" r="1.9" fill="var(--background)" /><circle cx="12.8" cy="9" r="1.9" fill="var(--background)" /><path d="M9.2 12.2h1.6l-.8-1.6Z" fill="var(--background)" /><path d="M8 16v2M10 16v2M12 16v2" stroke="currentColor" strokeWidth="1.3" /></svg>
+  );
+  return <svg viewBox="0 0 20 20" className={c} aria-hidden><path d="M10 1.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5-6.5-2 6.5-2Z" fill="currentColor" /></svg>;
+}
 export function Currency({ kind, value, className, live }: { kind: "gold" | "skulls" | "essence"; value: number; className?: string; live?: boolean }) {
-  const m = { gold: ["🪙", "text-gold"], skulls: ["💀", "text-skull"], essence: ["✦", "text-primary"] } as const;
+  const m = { gold: [<CurrencyIcon kind="gold" />, "text-gold"], skulls: [<CurrencyIcon kind="skulls" />, "text-skull"], essence: [<CurrencyIcon kind="essence" />, "text-primary"] } as const;
   const shown = useCountUp(Math.floor(value), live ?? false);
   const prev = useRef(Math.floor(value)); const [gain, setGain] = useState<{ n: number; key: number } | null>(null);
   useEffect(() => {

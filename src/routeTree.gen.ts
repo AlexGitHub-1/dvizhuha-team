@@ -10,8 +10,10 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AchievementsRouteImport } from './routes/achievements'
 import { Route as CampaignRouteImport } from './routes/campaign'
 import { Route as ChronicleRouteImport } from './routes/chronicle'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ShopRouteImport } from './routes/shop'
 import { Route as SquadRouteImport } from './routes/squad'
 import { Route as TalentsRouteImport } from './routes/talents'
@@ -22,6 +24,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AchievementsRoute = AchievementsRouteImport.update({
+  id: '/achievements',
+  path: '/achievements',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CampaignRoute = CampaignRouteImport.update({
   id: '/campaign',
   path: '/campaign',
@@ -30,6 +37,11 @@ const CampaignRoute = CampaignRouteImport.update({
 const ChronicleRoute = ChronicleRouteImport.update({
   id: '/chronicle',
   path: '/chronicle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShopRoute = ShopRouteImport.update({
@@ -55,8 +67,10 @@ const PlayLevelIdRoute = PlayLevelIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/achievements': typeof AchievementsRoute
   '/campaign': typeof CampaignRoute
   '/chronicle': typeof ChronicleRoute
+  '/settings': typeof SettingsRoute
   '/shop': typeof ShopRoute
   '/squad': typeof SquadRoute
   '/talents': typeof TalentsRoute
@@ -64,8 +78,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/achievements': typeof AchievementsRoute
   '/campaign': typeof CampaignRoute
   '/chronicle': typeof ChronicleRoute
+  '/settings': typeof SettingsRoute
   '/shop': typeof ShopRoute
   '/squad': typeof SquadRoute
   '/talents': typeof TalentsRoute
@@ -74,8 +90,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/achievements': typeof AchievementsRoute
   '/campaign': typeof CampaignRoute
   '/chronicle': typeof ChronicleRoute
+  '/settings': typeof SettingsRoute
   '/shop': typeof ShopRoute
   '/squad': typeof SquadRoute
   '/talents': typeof TalentsRoute
@@ -85,8 +103,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/achievements'
     | '/campaign'
     | '/chronicle'
+    | '/settings'
     | '/shop'
     | '/squad'
     | '/talents'
@@ -94,8 +114,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/achievements'
     | '/campaign'
     | '/chronicle'
+    | '/settings'
     | '/shop'
     | '/squad'
     | '/talents'
@@ -103,8 +125,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/achievements'
     | '/campaign'
     | '/chronicle'
+    | '/settings'
     | '/shop'
     | '/squad'
     | '/talents'
@@ -113,8 +137,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AchievementsRoute: typeof AchievementsRoute
   CampaignRoute: typeof CampaignRoute
   ChronicleRoute: typeof ChronicleRoute
+  SettingsRoute: typeof SettingsRoute
   ShopRoute: typeof ShopRoute
   SquadRoute: typeof SquadRoute
   TalentsRoute: typeof TalentsRoute
@@ -130,6 +156,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/achievements': {
+      id: '/achievements'
+      path: '/achievements'
+      fullPath: '/achievements'
+      preLoaderRoute: typeof AchievementsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/campaign': {
       id: '/campaign'
       path: '/campaign'
@@ -142,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/chronicle'
       fullPath: '/chronicle'
       preLoaderRoute: typeof ChronicleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/shop': {
@@ -177,8 +217,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AchievementsRoute: AchievementsRoute,
   CampaignRoute: CampaignRoute,
   ChronicleRoute: ChronicleRoute,
+  SettingsRoute: SettingsRoute,
   ShopRoute: ShopRoute,
   SquadRoute: SquadRoute,
   TalentsRoute: TalentsRoute,
